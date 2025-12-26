@@ -1,4 +1,4 @@
-# invest-agent (Liquidity-Only MVP)
+# liquidity-pulse (Liquidity-Only MVP)
 
 Remote-first Docker dev for use with Cursor Remote-SSH on a cloud VM. Includes a right-side chat assistant (SSE streaming) and two viz pages.
 
@@ -94,8 +94,8 @@ Remote-first Docker dev for use with Cursor Remote-SSH on a cloud VM. Includes a
   curl -fsSL https://get.docker.com | sh
   sudo usermod -aG docker $USER && newgrp docker
 - Clone repo and start:
-  git clone https://github.com/your-org/invest-agent.git
-  cd invest-agent
+  git clone https://github.com/your-org/liquidity-pulse.git
+  cd liquidity-pulse
   cp env.sample .env && edit .env
   make up
 - Tunnel API to your laptop:

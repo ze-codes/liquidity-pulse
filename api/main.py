@@ -10,7 +10,7 @@ from pathlib import Path
 from api.routers import health, registry, series, analytics, events, history, viz, llm
 
 
-app = FastAPI(title="invest-agent API", version="0.1.0")
+app = FastAPI(title="liquidity-pulse API", version="0.1.0")
 
 # CORS (dev-friendly)
 app.add_middleware(
