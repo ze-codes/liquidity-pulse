@@ -129,7 +129,7 @@ async def fetch_snapshot_data(horizon: str = "1w") -> Dict[str, Any]:
 # Brief Generation
 # -----------------------------------------------------------------------------
 
-async def generate_brief(horizon: str = "1w", api_key: Optional[str] = None) -> Dict[str, Any]:
+async def generate_brief(horizon: str = "1w", api_key: Optional[str] = None, provider: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate a market brief using live data.
     """
@@ -158,12 +158,14 @@ async def generate_brief(horizon: str = "1w", api_key: Optional[str] = None) -> 
     
     prompt = build_brief_prompt(context, indicator_infos=indicator_infos)
     
-    provider = get_provider(api_key=api_key)
+    # Get provider (with optional name override)
+    llm = get_provider(api_key=api_key, provider_name=provider)
+    
     # Run in threadpool if sync, but we are async now so...
     # The provider.complete is sync. We should run it in executor.
     loop = asyncio.get_running_loop()
     try:
-        raw_markdown = await loop.run_in_executor(None, provider.complete, prompt)
+        raw_markdown = await loop.run_in_executor(None, llm.complete, prompt)
     except Exception as e:
         raw_markdown = f"Error generating brief: {str(e)}"
 
@@ -265,12 +267,13 @@ async def agent_answer_question_events(
     question: str, 
     horizon: str = "1w", 
     chat_history: List[Dict[str, str]] = [],
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    provider: Optional[str] = None
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Async generator for agent events (SSE).
     """
-    provider = get_provider(api_key=api_key)
+    llm = get_provider(api_key=api_key, provider_name=provider)
     
     # 1. Fetch brief context (lightweight)
     snapshot = await fetch_snapshot_data(horizon)
@@ -319,7 +322,7 @@ async def agent_answer_question_events(
         
         # Generator for tokens
         def token_gen():
-            return provider.stream(str(model_input)) # This is sync
+            return llm.stream(str(model_input)) # This is sync
             
         try:
             for token in token_gen():

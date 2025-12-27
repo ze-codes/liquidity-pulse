@@ -152,20 +152,16 @@ class OpenRouterProvider:
             yield from fallback.stream(prompt)
 
 
-def get_provider(api_key: Optional[str] = None) -> LLMProvider:
+def get_provider(api_key: Optional[str] = None, provider_name: Optional[str] = None) -> LLMProvider:
     """Get an LLM provider instance.
     
     If api_key is provided (BYOK), it overrides the settings.
+    If provider_name is provided (BYOP), it overrides the settings.
     """
-    provider = (settings.llm_provider or "mock").lower()
+    provider = (provider_name or settings.llm_provider or "mock").lower()
     
     # Decide which key to use
     # If user provided key, use it. If not, use server key.
-    # Note: If provider is OpenRouter, user key is OpenRouter key.
-    # If provider is OpenAI, user key is OpenAI key.
-    # We assume the user knows which one they are providing if the backend is configured for one.
-    # Ideally frontend allows selecting provider, but for now we assume backend config dictates provider type.
-    
     effective_key = api_key or settings.llm_api_key
     effective_openrouter_key = api_key or settings.openrouter_api_key or settings.llm_api_key
 

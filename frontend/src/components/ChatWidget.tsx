@@ -34,6 +34,8 @@ export function ChatWidget() {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [tempKey, setTempKey] = useState(""); // Temporary state for input
+  const [apiProvider, setApiProvider] = useState("openrouter");
+  const [tempProvider, setTempProvider] = useState("openrouter");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -53,6 +55,12 @@ export function ChatWidget() {
       setTempKey(savedKey);
     }
 
+    const savedProvider = localStorage.getItem("liq_pulse_api_provider");
+    if (savedProvider) {
+      setApiProvider(savedProvider);
+      setTempProvider(savedProvider);
+    }
+
     // Load history
     fetch(`${API_URL}/llm/history?session_id=${sid}`)
       .then((res) => res.json())
@@ -67,23 +75,27 @@ export function ChatWidget() {
   // Open settings handler
   const openSettings = () => {
     setTempKey(apiKey); // Reset temp key to current actual key
+    setTempProvider(apiProvider);
     setShowSettings(true);
   };
 
   // Save key
   const handleSaveKey = () => {
     setApiKey(tempKey);
+    setApiProvider(tempProvider);
     if (tempKey) {
       localStorage.setItem("liq_pulse_api_key", tempKey);
     } else {
       localStorage.removeItem("liq_pulse_api_key");
     }
+    localStorage.setItem("liq_pulse_api_provider", tempProvider);
     setShowSettings(false);
   };
 
   // Cancel settings
   const handleCancelSettings = () => {
     setTempKey(apiKey); // Revert
+    setTempProvider(apiProvider);
     setShowSettings(false);
   };
 
@@ -114,6 +126,7 @@ export function ChatWidget() {
       const response = await fetch(url.toString(), {
         headers: {
           "X-LLM-API-Key": apiKey,
+          "X-LLM-Provider": apiProvider,
         },
       });
 
@@ -206,7 +219,10 @@ export function ChatWidget() {
     setIsBriefLoading(true);
     try {
       const headers: Record<string, string> = {};
-      if (apiKey) headers["X-LLM-API-Key"] = apiKey;
+      if (apiKey) {
+        headers["X-LLM-API-Key"] = apiKey;
+        headers["X-LLM-Provider"] = apiProvider;
+      }
 
       const res = await fetch(`${API_URL}/llm/brief`, {
         method: "POST",
@@ -266,7 +282,35 @@ export function ChatWidget() {
           <div className="space-y-4 flex-1">
             <div>
               <label className="block text-sm text-[#94a3b8] mb-1">
-                OpenAI / OpenRouter Key
+                LLM Provider
+              </label>
+              <div className="flex bg-[#0f1521] border border-[#2d3a50] rounded-lg p-1 mb-4">
+                <button
+                  onClick={() => setTempProvider("openrouter")}
+                  className={cn(
+                    "flex-1 py-1.5 text-xs rounded-md transition-colors",
+                    tempProvider === "openrouter"
+                      ? "bg-[#1a2234] text-cyan-400 shadow-sm border border-[#2d3a50]/50"
+                      : "text-[#64748b] hover:text-[#94a3b8]"
+                  )}
+                >
+                  OpenRouter
+                </button>
+                <button
+                  onClick={() => setTempProvider("openai")}
+                  className={cn(
+                    "flex-1 py-1.5 text-xs rounded-md transition-colors",
+                    tempProvider === "openai"
+                      ? "bg-[#1a2234] text-cyan-400 shadow-sm border border-[#2d3a50]/50"
+                      : "text-[#64748b] hover:text-[#94a3b8]"
+                  )}
+                >
+                  OpenAI
+                </button>
+              </div>
+
+              <label className="block text-sm text-[#94a3b8] mb-1">
+                API Key
               </label>
               <input
                 type="password"

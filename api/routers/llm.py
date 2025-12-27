@@ -14,17 +14,19 @@ router = APIRouter(prefix="/llm", tags=["llm"])
 @router.post("/brief")
 async def brief(
     horizon: str = "1w",
-    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key")
+    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key"),
+    x_llm_provider: Optional[str] = Header(None, alias="X-LLM-Provider")
 ):
     """
     Generate a market brief using live data.
     """
-    if not settings.llm_provider:
-        raise HTTPException(status_code=501, detail="LLM provider not configured")
+    # If no key and no server key, fail early? No, let mock handle it or orchestrator fail.
+    # if not settings.llm_provider and not x_llm_provider:
+    #     raise HTTPException(status_code=501, detail="LLM provider not configured")
     
     try:
         # Pass the key to the orchestrator (which passes to provider)
-        result = await orchestrator.generate_brief(horizon=horizon, api_key=x_llm_api_key)
+        result = await orchestrator.generate_brief(horizon=horizon, api_key=x_llm_api_key, provider=x_llm_provider)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -35,7 +37,8 @@ async def ask_stream(
     question: str, 
     horizon: str = "1w", 
     session_id: Optional[str] = None,
-    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key")
+    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key"),
+    x_llm_provider: Optional[str] = Header(None, alias="X-LLM-Provider")
 ):
     """
     Stream an answer to a question, using live tools and chat history.
@@ -60,7 +63,8 @@ async def ask_stream(
                 question=question, 
                 horizon=horizon, 
                 chat_history=chat_hist,
-                api_key=x_llm_api_key
+                api_key=x_llm_api_key,
+                provider=x_llm_provider
             ):
                 # Capture final answer for history
                 if ev["event"] == "final":
