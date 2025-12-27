@@ -1,193 +1,21 @@
-"""Live data endpoints - fetch directly from source APIs, no database."""
-from __future__ import annotations
-
-import csv
-import os
-import time
+import asyncio
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Dict, List, Optional
 from collections import defaultdict
 
-import yaml
-from fastapi import APIRouter, HTTPException
-from pathlib import Path
-
-from app.sources import fred, treasury, ofr
 from app.settings import settings
-
-router = APIRouter(prefix="/live", tags=["live"])
-
-# Load registries from YAML
-REGISTRY_PATH = Path(__file__).parent.parent.parent / "indicator_registry.yaml"
-SERIES_REGISTRY_PATH = Path(__file__).parent.parent.parent / "series_registry.yaml"
+from app.sources import fred, treasury, ofr
+from app.registry_loader import SERIES_REGISTRY, load_indicator_registry, load_series_registry
+from app.services.cache import memory_cache, csv_cache
 
 
-def load_series_registry() -> dict[str, dict]:
-    """Load series definitions from series_registry.yaml."""
-    if not SERIES_REGISTRY_PATH.exists():
-        return {}
-    with open(SERIES_REGISTRY_PATH) as f:
-        data = yaml.safe_load(f) or {}
-        return data.get("series", {})
+def list_indicators() -> List[Dict[str, Any]]:
+    """Return all indicators from registry."""
+    return load_indicator_registry()
 
 
-# Load series registry at module level
-SERIES_REGISTRY = load_series_registry()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CSV File Cache (L2 - persistent across restarts)
-# ─────────────────────────────────────────────────────────────────────────────
-class CSVCache:
-    """File-based CSV cache for series data."""
-    
-    def __init__(self, cache_dir: str, ttl_seconds: int = 3600):
-        self._cache_dir = Path(cache_dir) / "series"
-        self._ttl = ttl_seconds
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-    
-    def _get_path(self, series_id: str) -> Path:
-        return self._cache_dir / f"{series_id.upper()}.csv"
-    
-    def is_valid(self, series_id: str) -> bool:
-        """Check if cache file exists and is fresh."""
-        if settings.cache_disabled:
-            return False
-        path = self._get_path(series_id)
-        if not path.exists():
-            return False
-        age = time.time() - path.stat().st_mtime
-        return age < self._ttl
-    
-    def read(self, series_id: str) -> list[dict] | None:
-        """Read cached data from CSV file."""
-        if settings.cache_disabled:
-            return None
-        path = self._get_path(series_id)
-        if not path.exists():
-            return None
-        
-        try:
-            items = []
-            with open(path, "r", newline="") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    items.append({
-                        "date": row["date"],
-                        "value": float(row["value"])
-                    })
-            return items
-        except Exception:
-            return None
-    
-    def write(self, series_id: str, items: list[dict]) -> None:
-        """Write data to CSV file."""
-        if settings.cache_disabled:
-            return
-        path = self._get_path(series_id)
-        try:
-            with open(path, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=["date", "value"])
-                writer.writeheader()
-                for item in items:
-                    writer.writerow({"date": item["date"], "value": item["value"]})
-        except Exception:
-            pass  # Silently fail on write errors
-    
-    def clear(self, series_id: str | None = None) -> int:
-        """Clear cache files. If series_id is None, clear all."""
-        count = 0
-        if series_id:
-            path = self._get_path(series_id)
-            if path.exists():
-                path.unlink()
-                count = 1
-        else:
-            for path in self._cache_dir.glob("*.csv"):
-                path.unlink()
-                count += 1
-        return count
-    
-    def stats(self) -> dict:
-        """Return cache statistics."""
-        files = list(self._cache_dir.glob("*.csv"))
-        now = time.time()
-        valid = sum(1 for f in files if now - f.stat().st_mtime < self._ttl)
-        total_size = sum(f.stat().st_size for f in files)
-        return {
-            "total_files": len(files),
-            "valid_files": valid,
-            "total_size_bytes": total_size,
-            "ttl_seconds": self._ttl,
-            "cache_dir": str(self._cache_dir),
-            "disabled": settings.cache_disabled
-        }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# In-Memory TTL Cache (L1 - fast, per-request dedup)
-# ─────────────────────────────────────────────────────────────────────────────
-class TTLCache:
-    """Simple in-memory cache with TTL expiration."""
-    
-    def __init__(self, ttl_seconds: int = 3600):
-        self._cache: dict[str, tuple[float, Any]] = {}
-        self._ttl = ttl_seconds
-    
-    def get(self, key: str) -> Any | None:
-        if settings.cache_disabled:
-            return None
-        entry = self._cache.get(key)
-        if entry is None:
-            return None
-        timestamp, value = entry
-        if time.time() - timestamp > self._ttl:
-            del self._cache[key]
-            return None
-        return value
-    
-    def set(self, key: str, value: Any) -> None:
-        if settings.cache_disabled:
-            return
-        self._cache[key] = (time.time(), value)
-    
-    def clear(self) -> None:
-        self._cache.clear()
-    
-    def stats(self) -> dict:
-        """Return cache statistics."""
-        now = time.time()
-        valid = sum(1 for ts, _ in self._cache.values() if now - ts <= self._ttl)
-        return {
-            "total_entries": len(self._cache),
-            "valid_entries": valid,
-            "ttl_seconds": self._ttl,
-            "disabled": settings.cache_disabled
-        }
-
-
-# Global cache instances
-_memory_cache = TTLCache(ttl_seconds=settings.cache_ttl_seconds)
-_csv_cache = CSVCache(cache_dir=settings.cache_dir, ttl_seconds=settings.cache_ttl_seconds)
-
-
-def load_registry() -> list[dict]:
-    """Load indicator definitions from indicator_registry.yaml."""
-    if not REGISTRY_PATH.exists():
-        return []
-    with open(REGISTRY_PATH) as f:
-        return yaml.safe_load(f) or []
-
-
-@router.get("/indicators")
-def list_indicators() -> list[dict]:
-    """Return indicator definitions from indicator_registry.yaml (no DB)."""
-    return load_registry()
-
-
-@router.get("/series-list")
-def list_series() -> list[dict]:
-    """Return available data series for visualization."""
+def list_series() -> List[Dict[str, Any]]:
+    """Return available data series for visualization (excluding purely internal derived ones)."""
     result = []
     for series_id, meta in SERIES_REGISTRY.items():
         # Skip derived series that are just internal aggregations
@@ -200,54 +28,16 @@ def list_series() -> list[dict]:
             "cadence": meta.get("cadence", "daily"),
             "units": meta.get("units", "USD"),
             "source": source,
+            "description": meta.get("description"),
+            "impact": meta.get("impact"),
+            "interpretation": meta.get("interpretation"),
         })
     # Sort by source then id
     result.sort(key=lambda x: (x["source"], x["id"]))
     return result
 
 
-@router.get("/cache/stats")
-def cache_stats() -> dict:
-    """Return cache statistics for both L1 (memory) and L2 (CSV) caches."""
-    return {
-        "memory": _memory_cache.stats(),
-        "csv": _csv_cache.stats()
-    }
-
-
-@router.post("/cache/clear")
-def cache_clear() -> dict:
-    """Clear all cached data (both memory and CSV)."""
-    _memory_cache.clear()
-    csv_count = _csv_cache.clear()
-    return {"status": "cleared", "csv_files_deleted": csv_count}
-
-
-@router.get("/debug/tga")
-async def debug_tga() -> dict:
-    """Debug endpoint to see raw TGA data."""
-    data = await treasury.fetch_tga_latest(limit=10, pages=1)
-    raw_rows = data.get("data", [])[:5]  # First 5 rows
-    account_types = list(set(row.get("account_type", "MISSING") for row in data.get("data", [])))
-    return {
-        "raw_sample": raw_rows,
-        "account_types_found": account_types,
-        "total_rows": len(data.get("data", []))
-    }
-
-
-@router.get("/debug/auctions")
-async def debug_auctions() -> dict:
-    """Debug endpoint to see raw auction data."""
-    data = await treasury.fetch_auction_schedules(limit=10, pages=1)
-    return {
-        "raw_sample": data.get("data", [])[:5],
-        "total_rows": len(data.get("data", []))
-    }
-
-
-@router.get("/series/{series_id}")
-async def get_series(series_id: str, days: int = 180) -> dict[str, Any]:
+async def get_series(series_id: str, days: int = 180) -> Dict[str, Any]:
     """Fetch a single series with two-tier caching (L1: memory, L2: CSV)."""
     
     sid = series_id.upper()
@@ -255,13 +45,13 @@ async def get_series(series_id: str, days: int = 180) -> dict[str, Any]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     
     # L1: Check memory cache (fast, includes days filter)
-    cached = _memory_cache.get(cache_key)
+    cached = memory_cache.get(cache_key)
     if cached is not None:
         return cached
     
     # L2: Check CSV cache (persistent, stores all data)
-    if _csv_cache.is_valid(sid):
-        all_items = _csv_cache.read(sid)
+    if csv_cache.is_valid(sid):
+        all_items = csv_cache.read(sid)
         if all_items:
             # Check if cache has data old enough for the request
             earliest_cached = min(i["date"] for i in all_items) if all_items else None
@@ -271,37 +61,39 @@ async def get_series(series_id: str, days: int = 180) -> dict[str, Any]:
                 filtered = [i for i in all_items if i["date"] >= cutoff]
                 meta = SERIES_REGISTRY.get(sid, {})
                 result = {"series_id": sid, "source": meta.get("source", "CSV_CACHE"), "items": filtered}
-                _memory_cache.set(cache_key, result)
+                memory_cache.set(cache_key, result)
                 return result
             # Cache doesn't have enough history - need to refetch
+            print(f"[DEBUG] Cache miss for {sid}: earliest cached {earliest_cached} > cutoff {cutoff}. Refetching.")
     
     # Miss: Fetch from API
-    result = await _fetch_series_uncached(series_id, days)
+    try:
+        result = await fetch_series_uncached(series_id, days)
+    except ValueError as e:
+        # Re-raise as is (caller handles mapping to HTTP errors)
+        raise e
     
     # Save to L1 memory cache
-    _memory_cache.set(cache_key, result)
+    memory_cache.set(cache_key, result)
     
     # Save to L2 CSV cache (full data, not filtered)
     # Only cache raw series, not derived ones (which depend on other series)
     meta = SERIES_REGISTRY.get(sid, {})
     if meta.get("source") != "DERIVED":
         # Merge with existing cache if it has newer data we're missing
-        existing = _csv_cache.read(sid) or []
-        existing_dates = {i["date"] for i in existing}
-        new_items = result.get("items", [])
-        
+        existing = csv_cache.read(sid) or []
         # Combine: existing + new (dedupe by date, prefer new)
         combined = {i["date"]: i for i in existing}
-        for item in new_items:
+        for item in result.get("items", []):
             combined[item["date"]] = item
         
         merged = sorted(combined.values(), key=lambda x: x["date"])
-        _csv_cache.write(sid, merged)
+        csv_cache.write(sid, merged)
     
     return result
 
 
-async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
+async def fetch_series_uncached(series_id: str, days: int) -> Dict[str, Any]:
     """Fetch series data from source API (no cache). Uses series_registry.yaml for routing."""
     
     sid = series_id.upper()
@@ -309,12 +101,14 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
     source = meta.get("source", "")
     raw_scale = float(meta.get("raw_scale", 1))
     
+    print(f"[DEBUG] fetch_series_uncached: {sid}, days={days}, source={source}")
+
     # ─────────────────────────────────────────────────────────────────────────
     # FRED Series
     # ─────────────────────────────────────────────────────────────────────────
     if source == "FRED":
         if not settings.fred_api_key:
-            raise HTTPException(400, "FRED_API_KEY not configured")
+            raise ValueError("FRED_API_KEY not configured")
         
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         data = await fred.fetch_series(sid, observation_start=start_date, last_n=days + 50)
@@ -338,15 +132,31 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
     # Treasury TGA
     # ─────────────────────────────────────────────────────────────────────────
     if source == "TREASURY_TGA":
-        # Each page has multiple account types per date, need ~4 rows per date
+        # Each page has multiple account types per date.
+        # Density is ~4-5 rows/day. Using divisor 100 implies 10 rows/day safety buffer.
         pages_needed = max(3, (days // 100) + 1)
         data = await treasury.fetch_tga_latest(limit=1000, pages=pages_needed)
         items = []
         seen_dates = set()
         for row in data.get("data", []):
             account_type = (row.get("account_type") or "").lower()
-            if "closing balance" not in account_type:
+            # Skip explicit Opening Balance rows (present in recent data)
+            if "opening balance" in account_type:
                 continue
+            
+            # Match:
+            # 1. "Treasury General Account (TGA) Closing Balance" (Newer)
+            # 2. "Federal Reserve Account" (Older)
+            # 3. "Treasury General Account" (Generic)
+            is_match = (
+                "closing balance" in account_type or 
+                "federal reserve account" in account_type or
+                account_type == "treasury general account"
+            )
+            
+            if not is_match:
+                continue
+
             date_str = row.get("record_date")
             if not date_str or date_str in seen_dates:
                 continue
@@ -361,6 +171,7 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
                 continue
         
         items.sort(key=lambda x: x["date"])
+        print(f"[DEBUG] TGA fetched {len(items)} daily items. First: {items[0]['date'] if items else 'None'}, Last: {items[-1]['date'] if items else 'None'}")
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         items = [i for i in items if i["date"] >= cutoff]
         
@@ -408,7 +219,7 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
         data = await treasury.fetch_auction_schedules(limit=500, pages=3, start_date=start_date)
         rows = treasury.parse_auction_rows(data)
         
-        totals_by_date: dict[str, float] = defaultdict(float)
+        totals_by_date: Dict[str, float] = defaultdict(float)
         for r in rows:
             issue_date = r.get("issue_date")
             if not issue_date:
@@ -452,15 +263,15 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
         aggregation = meta.get("aggregation")
         
         if not base_series:
-            raise HTTPException(400, f"Derived series {sid} missing base_series")
+            raise ValueError(f"Derived series {sid} missing base_series")
         
         # Weekly sum aggregation
         if aggregation == "weekly_sum":
             base_data = await get_series(base_series, days=days)
             base_items = base_data.get("items", [])
             
-            weekly_totals: dict[str, float] = defaultdict(float)
-            week_dates: dict[str, str] = {}
+            weekly_totals: Dict[str, float] = defaultdict(float)
+            week_dates: Dict[str, str] = {}
             
             for item in base_items:
                 d = datetime.strptime(item["date"], "%Y-%m-%d")
@@ -488,9 +299,9 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
             data = await treasury.fetch_auction_schedules(limit=500, pages=3, start_date=start_date)
             rows = treasury.parse_auction_rows(data)
             
-            bills_by_week: dict[str, float] = defaultdict(float)
-            total_by_week: dict[str, float] = defaultdict(float)
-            week_dates: dict[str, str] = {}
+            bills_by_week: Dict[str, float] = defaultdict(float)
+            total_by_week: Dict[str, float] = defaultdict(float)
+            week_dates: Dict[str, str] = {}
             
             for r in rows:
                 issue_date = r.get("issue_date")
@@ -522,24 +333,18 @@ async def _fetch_series_uncached(series_id: str, days: int) -> dict[str, Any]:
             
             return {"series_id": sid, "source": "DERIVED", "items": items}
         
-        raise HTTPException(400, f"Unknown aggregation type: {aggregation}")
+        raise ValueError(f"Unknown aggregation type: {aggregation}")
     
-    raise HTTPException(404, f"Unknown series: {series_id}. Add it to series_registry.yaml")
+    raise ValueError(f"Unknown series: {series_id}. Add it to series_registry.yaml")
 
 
-async def get_series_data(series_id: str, days: int) -> dict[str, Any]:
-    """Helper to get series data (uses cache)."""
-    return await get_series(series_id, days)
-
-
-@router.get("/indicators/{indicator_id}")
-async def get_indicator_live(indicator_id: str, days: int = 180) -> dict[str, Any]:
+async def get_indicator_live(indicator_id: str, days: int = 180) -> Dict[str, Any]:
     """Fetch live data for an indicator and compute its value."""
-    registry = load_registry()
+    registry = load_indicator_registry()
     indicator = next((i for i in registry if i["id"] == indicator_id), None)
     
     if not indicator:
-        raise HTTPException(404, f"Unknown indicator: {indicator_id}")
+        raise ValueError(f"Unknown indicator: {indicator_id}")
     
     # Override series for indicators with derived/computed series
     SERIES_OVERRIDES = {
@@ -556,7 +361,7 @@ async def get_indicator_live(indicator_id: str, days: int = 180) -> dict[str, An
         try:
             data = await get_series(sid, days=days)
             series_data[sid] = data["items"]
-        except HTTPException:
+        except ValueError:
             series_data[sid] = []
     
     # Compute indicator values based on type
@@ -571,7 +376,7 @@ async def get_indicator_live(indicator_id: str, days: int = 180) -> dict[str, An
     }
 
 
-def compute_indicator(indicator_id: str, indicator: dict, series_data: dict) -> list[dict]:
+def compute_indicator(indicator_id: str, indicator: Dict, series_data: Dict) -> List[Dict]:
     """Compute indicator values from raw series data."""
     
     # Net Liquidity = WALCL - TGA - RRP
@@ -691,10 +496,10 @@ def compute_indicator(indicator_id: str, indicator: dict, series_data: dict) -> 
             friday = d + timedelta(days=days_ahead)
             return friday.strftime("%Y-%m-%d")
         
-        weekly_issues: dict[str, float] = defaultdict(float)
-        weekly_redemptions: dict[str, float] = defaultdict(float)
-        weekly_interest: dict[str, float] = defaultdict(float)
-        week_dates: dict[str, str] = {}  # week -> representative Friday date
+        weekly_issues: Dict[str, float] = defaultdict(float)
+        weekly_redemptions: Dict[str, float] = defaultdict(float)
+        weekly_interest: Dict[str, float] = defaultdict(float)
+        week_dates: Dict[str, str] = {}  # week -> representative Friday date
         
         for d, v in issues.items():
             w = get_week(d)
@@ -733,4 +538,3 @@ def compute_indicator(indicator_id: str, indicator: dict, series_data: dict) -> 
             return series_data[sid]
     
     return []
-

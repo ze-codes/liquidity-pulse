@@ -35,9 +35,7 @@ async def fetch_series(
     if observation_end:
         params["observation_end"] = observation_end
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         r = await client.get(FRED_BASE, params=params)
         r.raise_for_status()
         return r.json()
-
-

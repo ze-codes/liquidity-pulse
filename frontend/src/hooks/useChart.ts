@@ -29,7 +29,7 @@ export function useChart({ getUnits }: UseChartOptions) {
     new Set()
   );
   const [chartSeries, setChartSeries] = useState<Set<string>>(new Set());
-  const [days, setDays] = useState(90);
+  const [days, setDays] = useState(1825);
   const [isLoading, setIsLoading] = useState(false);
 
   const chartRef = useRef<HTMLDivElement>(null);
@@ -114,6 +114,16 @@ export function useChart({ getUnits }: UseChartOptions) {
     ]);
     setIsLoading(false);
 
+    // Build a shared date index across all fetched series
+    const allDatesSet = new Set<string>();
+    for (const r of results) {
+      if (!r?.data?.items) continue;
+      for (const it of r.data.items) allDatesSet.add(it.date);
+    }
+    const allDates = [...allDatesSet].sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    );
+
     const echartsSeries: echarts.SeriesOption[] = [];
     const legendData: string[] = [];
     let colorIdx = 0;
@@ -129,16 +139,39 @@ export function useChart({ getUnits }: UseChartOptions) {
 
       if (!isLarge) rightAxisUnits.add(units);
 
+      // Create map for fast lookup
+      const valueByDate = new Map<string, number>();
+      for (const it of data.items) valueByDate.set(it.date, it.value);
+
+      // Forward-fill logic
+      const filledData: (number | null)[] = [];
+      let lastVal: number | null = null;
+
+      for (const d of allDates) {
+        const val = valueByDate.get(d);
+        if (val !== undefined && val !== null) {
+          lastVal = val;
+          filledData.push(val);
+        } else {
+          // If missing, use last known value (forward fill)
+          // Only forward fill if we have a previous value (don't backfill start)
+          filledData.push(lastVal);
+        }
+      }
+
       legendData.push(id);
       echartsSeries.push({
         name: id,
         type: "line",
         smooth: true,
         symbol: "none",
+        // Connect nulls is less critical with forward-fill, but good as backup
+        connectNulls: true,
         yAxisIndex: isLarge ? 0 : 1,
         lineStyle: { width: 2 },
         itemStyle: { color: CHART_COLORS[colorIdx % CHART_COLORS.length] },
-        data: data.items.map((i) => [i.date, i.value]),
+        // Map date to [date, value]
+        data: allDates.map((d, i) => [d, filledData[i]]),
       });
       colorIdx++;
     }
@@ -151,6 +184,10 @@ export function useChart({ getUnits }: UseChartOptions) {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
+        axisPointer: {
+          type: "cross",
+          snap: true,
+        },
         backgroundColor: "#1a2234",
         borderColor: "#2d3a50",
         textStyle: { color: "#e2e8f0", fontFamily: "Outfit" },
@@ -159,19 +196,27 @@ export function useChart({ getUnits }: UseChartOptions) {
             axisValueLabel: string;
             color: string;
             seriesName: string;
-            value: [string, number];
+            value: [string, number | null];
           }>;
+          if (!p || p.length === 0) return "";
           let html = `<div style="font-weight:600;margin-bottom:8px">${p[0].axisValueLabel}</div>`;
           for (const item of p) {
+            const rawVal = item.value[1];
+
+            // Only show item if it has a value (even if 0), skip null/undefined
+            // Since we forward-fill, null only happens at the very start of a series
+            if (rawVal === null || rawVal === undefined) continue;
+
             const units = getUnits(item.seriesName);
             const largeScale = units === "USD";
-            const val = largeScale
-              ? formatValue(item.value[1])
-              : formatSmallValue(item.value[1], units);
+            const valStr = largeScale
+              ? formatValue(rawVal)
+              : formatSmallValue(rawVal, units);
+
             html += `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
               <span style="width:10px;height:10px;border-radius:50%;background:${item.color}"></span>
               <span style="flex:1">${item.seriesName}</span>
-              <span style="font-family:JetBrains Mono;font-weight:600">${val}</span>
+              <span style="font-family:JetBrains Mono;font-weight:600">${valStr}</span>
             </div>`;
           }
           return html;

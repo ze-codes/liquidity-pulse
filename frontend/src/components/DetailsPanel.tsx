@@ -6,6 +6,7 @@ import type { Indicator, Series, Selection, SelectionMode } from "@/types";
 interface DetailsPanelProps {
   selection: Selection;
   selectedItem: Indicator | Series | null;
+  isCharted: boolean;
   indicators: Indicator[];
   seriesList: Series[];
   onNavigate: (mode: SelectionMode, id: string | null) => void;
@@ -14,6 +15,7 @@ interface DetailsPanelProps {
 export function DetailsPanel({
   selection,
   selectedItem,
+  isCharted,
   indicators,
   seriesList,
   onNavigate,
@@ -52,34 +54,55 @@ export function DetailsPanel({
             />
           </svg>
         </div>
-        <h3 className="font-medium">
+        <h3 className="font-medium min-w-0 truncate">
           {selectedItem
             ? selection.mode === "indicator"
               ? (selectedItem as Indicator).name
               : (selectedItem as Series).id
             : "Details"}
         </h3>
+        {selectedItem && (
+          <span
+            className={cn(
+              "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-xs",
+              isCharted
+                ? selection.mode === "indicator"
+                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-300"
+                  : "border-purple-400/40 bg-purple-400/10 text-purple-300"
+                : "border-[#2d3a50] bg-[#111827] text-[#64748b]"
+            )}
+            title={
+              isCharted
+                ? "This item is currently displayed on the chart"
+                : "This item is not currently displayed on the chart"
+            }
+          >
+            {isCharted ? "On chart" : "Not on chart"}
+          </span>
+        )}
       </div>
 
-      {!selectedItem ? (
-        <div className="flex min-h-[300px] items-center justify-center px-4 py-8">
-          <p className="text-center text-sm text-[#64748b]">
-            Select an indicator or data series to view its relationships
-          </p>
-        </div>
-      ) : selection.mode === "indicator" ? (
-        <IndicatorDetails
-          indicator={selectedItem as Indicator}
-          seriesList={seriesList}
-          onNavigate={onNavigate}
-        />
-      ) : (
-        <SeriesDetails
-          series={selectedItem as Series}
-          indicators={indicators}
-          onNavigate={onNavigate}
-        />
-      )}
+      <div className="max-h-[350px] overflow-y-auto">
+        {!selectedItem ? (
+          <div className="flex min-h-[300px] items-center justify-center px-4 py-8">
+            <p className="text-center text-sm text-[#64748b]">
+              Select an indicator or data series to view its relationships
+            </p>
+          </div>
+        ) : selection.mode === "indicator" ? (
+          <IndicatorDetails
+            indicator={selectedItem as Indicator}
+            seriesList={seriesList}
+            onNavigate={onNavigate}
+          />
+        ) : (
+          <SeriesDetails
+            series={selectedItem as Series}
+            indicators={indicators}
+            onNavigate={onNavigate}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -95,10 +118,46 @@ function IndicatorDetails({
 }) {
   return (
     <div className="p-4">
-      <p className="text-sm text-[#94a3b8] mb-1 font-mono">{indicator.id}</p>
-      <p className="text-xs text-[#64748b] mb-4">
-        {indicator.directionality?.replace(/_/g, " ")}
-      </p>
+      <div className="mb-4">
+        <p className="text-sm text-[#94a3b8] mb-1 font-mono">{indicator.id}</p>
+        <p className="text-xs text-[#64748b]">
+          {indicator.directionality?.replace(/_/g, " ")}
+        </p>
+      </div>
+
+      {/* Rich Metadata */}
+      <div className="mb-6 space-y-4">
+        {indicator.description && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Description
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {indicator.description}
+            </p>
+          </div>
+        )}
+        {indicator.impact && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Impact
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {indicator.impact}
+            </p>
+          </div>
+        )}
+        {indicator.interpretation && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Interpretation
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {indicator.interpretation}
+            </p>
+          </div>
+        )}
+      </div>
 
       <h4 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#64748b]">
         Uses Data Series
@@ -167,10 +226,46 @@ function SeriesDetails({
 
   return (
     <div className="p-4">
-      <p className="text-sm text-[#94a3b8] mb-1">{series.name}</p>
-      <p className="text-xs text-[#64748b] mb-4">
-        {series.source} • {series.cadence} • {series.units}
-      </p>
+      <div className="mb-4">
+        <p className="text-sm text-[#94a3b8] mb-1">{series.name}</p>
+        <p className="text-xs text-[#64748b]">
+          {series.source} • {series.cadence} • {series.units}
+        </p>
+      </div>
+
+      {/* Rich Metadata */}
+      <div className="mb-6 space-y-4">
+        {series.description && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Description
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {series.description}
+            </p>
+          </div>
+        )}
+        {series.impact && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Impact
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {series.impact}
+            </p>
+          </div>
+        )}
+        {series.interpretation && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-[#64748b] mb-1.5">
+              Interpretation
+            </h4>
+            <p className="text-xs text-[#94a3b8] leading-relaxed">
+              {series.interpretation}
+            </p>
+          </div>
+        )}
+      </div>
 
       <h4 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#64748b]">
         Used By Indicators

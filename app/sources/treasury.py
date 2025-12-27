@@ -12,7 +12,7 @@ DTS_INTEREST_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_serv
 
 async def fetch_tga_latest(limit: int = 1000, pages: int = 50) -> Dict[str, Any]:
     combined: List[Dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         for page in range(1, pages + 1):
             params = {
                 "sort": "-record_date",
@@ -22,15 +22,21 @@ async def fetch_tga_latest(limit: int = 1000, pages: int = 50) -> Dict[str, Any]
                 # Request documented fields; we'll filter in code to capture naming variants
                 "fields": "record_date,account_type,close_today_bal,open_today_bal",
             }
-            r = await client.get(DTS_TGA_URL, params=params)
-            r.raise_for_status()
-            js = r.json()
-            data = js.get("data", [])
-            if not data:
-                break
-            combined.extend(data)
-            if len(data) < limit:
-                break
+            try:
+                r = await client.get(DTS_TGA_URL, params=params)
+                r.raise_for_status()
+                js = r.json()
+                data = js.get("data", [])
+                if not data:
+                    break
+                combined.extend(data)
+                if len(data) < limit:
+                    break
+            except httpx.HTTPStatusError as e:
+                # 400/404 often indicates end of pagination for Treasury API
+                if e.response.status_code in (400, 404):
+                    break
+                raise e
     return {"data": combined}
 
 
@@ -40,7 +46,7 @@ async def fetch_dts_cash_timeseries(url: str, limit: int = 1000, pages: int = 50
     Keeps params minimal for compatibility across DTS endpoints.
     """
     combined: List[Dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         for page in range(1, pages + 1):
             params: Dict[str, Any] = {
                 "sort": "-record_date",
@@ -52,15 +58,20 @@ async def fetch_dts_cash_timeseries(url: str, limit: int = 1000, pages: int = 50
                 params["fields"] = fields
             if extra_params:
                 params.update(extra_params)
-            r = await client.get(url, params=params)
-            r.raise_for_status()
-            js = r.json()
-            data = js.get("data", [])
-            if not data:
-                break
-            combined.extend(data)
-            if len(data) < limit:
-                break
+            try:
+                r = await client.get(url, params=params)
+                r.raise_for_status()
+                js = r.json()
+                data = js.get("data", [])
+                if not data:
+                    break
+                combined.extend(data)
+                if len(data) < limit:
+                    break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (400, 404):
+                    break
+                raise e
     return {"data": combined}
 
 
@@ -177,7 +188,7 @@ async def fetch_auction_schedules(limit: int = 1000, pages: int = 50, start_date
     Dataset fields vary; we request a broad set and filter in code later.
     """
     combined: List[Dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         for page in range(1, pages + 1):
             params = {
                 "sort": "-auction_date",
@@ -193,15 +204,20 @@ async def fetch_auction_schedules(limit: int = 1000, pages: int = 50, start_date
             if end_date:
                 # FiscalData supports multiple filters with commas; keep simple for MVP
                 params["filter"] = (params.get("filter", "") + ("," if params.get("filter") else "")) + f"auction_date:lte:{end_date}"
-            r = await client.get(TREASURY_AUCTIONS_URL, params=params)
-            r.raise_for_status()
-            js = r.json()
-            data = js.get("data", [])
-            if not data:
-                break
-            combined.extend(data)
-            if len(data) < limit:
-                break
+            try:
+                r = await client.get(TREASURY_AUCTIONS_URL, params=params)
+                r.raise_for_status()
+                js = r.json()
+                data = js.get("data", [])
+                if not data:
+                    break
+                combined.extend(data)
+                if len(data) < limit:
+                    break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (400, 404):
+                    break
+                raise e
     return {"data": combined}
 
 
@@ -265,4 +281,3 @@ def parse_auction_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         )
     return out
-

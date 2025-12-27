@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     cache_disabled: bool = False  # set CACHE_DISABLED=true to disable
     cache_ttl_seconds: int = 3600  # 1 hour default
     cache_dir: str = "./cache"  # directory for CSV cache files
+    # CORS (comma-separated list of allowed origins)
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     class Config:
         env_file = ".env"

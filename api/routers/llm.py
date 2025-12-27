@@ -1,49 +1,100 @@
-from typing import Optional
+from typing import Optional, Dict, Any
+import json
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Header
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
-from app.db import get_db
 from app.settings import settings
-from app.llm import generate_brief
-from app.llm.orchestrator import agent_answer_question_events, agent_answer_question_events_tools
+from app.llm import orchestrator
+from app.llm import history
 
-
-router = APIRouter()
-
+router = APIRouter(prefix="/llm", tags=["llm"])
 
 @router.post("/brief")
-def brief(horizon: str = "1w", as_of: Optional[str] = None, k: int = 12, db: Session = Depends(get_db)):
+async def brief(
+    horizon: str = "1w",
+    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key")
+):
+    """
+    Generate a market brief using live data.
+    """
     if not settings.llm_provider:
-        pass
+        raise HTTPException(status_code=501, detail="LLM provider not configured")
+    
     try:
-        result = generate_brief(db, horizon=horizon, as_of=as_of, k=k)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return result
+        # Pass the key to the orchestrator (which passes to provider)
+        result = await orchestrator.generate_brief(horizon=horizon, api_key=x_llm_api_key)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/ask_stream")
-def ask_stream(question: str, horizon: str = "1w", as_of: Optional[str] = None, db: Session = Depends(get_db)):
+async def ask_stream(
+    question: str, 
+    horizon: str = "1w", 
+    session_id: Optional[str] = None,
+    x_llm_api_key: Optional[str] = Header(None, alias="X-LLM-API-Key")
+):
+    """
+    Stream an answer to a question, using live tools and chat history.
+    """
     if not question or not question.strip():
         raise HTTPException(status_code=400, detail="question is required")
 
-    def _sse():
+    # If no session_id provided, generate a temp one (but it won't persist effectively for the user)
+    # Ideally frontend sends one.
+    sid = session_id or str(uuid.uuid4())
+    
+    # Save user question
+    history.append_message(sid, "user", question)
+    
+    # Load history
+    chat_hist = history.load_history(sid)
+    
+    async def _sse():
+        full_answer = ""
         try:
-            use_tools = getattr(settings, "llm_use_tools", False)
-            gen = agent_answer_question_events_tools if use_tools else agent_answer_question_events
-            for ev in gen(db, question=question, horizon=horizon, as_of=as_of):
-                # SSE format: optional 'event:' then 'data:' line, blank line terminator
+            async for ev in orchestrator.agent_answer_question_events(
+                question=question, 
+                horizon=horizon, 
+                chat_history=chat_hist,
+                api_key=x_llm_api_key
+            ):
+                # Capture final answer for history
+                if ev["event"] == "final":
+                    data = ev.get("data", {})
+                    full_answer = data.get("answer", "")
+                
+                # Format SSE
                 name = ev.get("event", "message")
                 payload = ev.get("data", {})
-                import json as _json
-                yield f"event: {name}\n" + f"data: {_json.dumps(payload, default=str)}\n\n"
+                yield f"event: {name}\n" + f"data: {json.dumps(payload, default=str)}\n\n"
+            
+            # Save assistant answer
+            if full_answer:
+                history.append_message(sid, "assistant", full_answer)
+                
         except Exception as e:
-            yield f"event: error\n" + f"data: {str(e)}\n\n"
+            yield f"event: error\n" + f"data: {json.dumps({'message': str(e)})}\n\n"
 
     return StreamingResponse(_sse(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
+        "X-Session-ID": sid 
     })
 
+
+@router.get("/history")
+def get_history(session_id: str):
+    """Get chat history for a session."""
+    return {"messages": history.load_history(session_id)}
+
+
+@router.delete("/history")
+def clear_history(session_id: str):
+    """Clear chat history."""
+    # We can just write an empty list
+    history.save_history(session_id, [])
+    return {"status": "cleared"}

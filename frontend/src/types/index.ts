@@ -7,6 +7,9 @@ export interface Indicator {
   directionality?: string;
   units?: string;
   series?: string[];
+  description?: string;
+  impact?: string;
+  interpretation?: string;
 }
 
 export interface Series {
@@ -15,6 +18,9 @@ export interface Series {
   source: string;
   cadence: string;
   units: string;
+  description?: string;
+  impact?: string;
+  interpretation?: string;
 }
 
 export interface DataItem {

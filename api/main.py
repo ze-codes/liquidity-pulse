@@ -7,24 +7,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from api.routers import health, viz, live
+from api.routers import health, market_data, llm
+from app.settings import settings
 
 
 app = FastAPI(title="liquidity-pulse API", version="0.1.0")
 
 # CORS (dev-friendly)
+_cors_origins = [
+    o.strip()
+    for o in (settings.cors_origins or "").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers (no DB required)
 app.include_router(health.router)
-app.include_router(viz.router)
-app.include_router(live.router)
+app.include_router(market_data.router)
+app.include_router(llm.router)
 
 # Static files (for HTML viz pages)
 static_dir = Path(__file__).resolve().parents[1] / "api" / "static"
@@ -33,6 +39,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/")
 def root_redirect():
+    # Redirect to the frontend in dev (usually localhost:3000) or keep serving static
     return RedirectResponse(url="/static/viz_live.html")
 
 
@@ -69,4 +76,3 @@ async def log_requests(request: Request, call_next):
     except Exception:
         pass
     return response
-

@@ -48,7 +48,7 @@ def build_agent_system_prompt(known_ids_context: str, tool_catalog: str) -> str:
     tool_catalog: output of the tool catalog description
     """
     return (
-        "You are a precise liquidity assistant. Use tools only when needed.\n"
+        "You are a precise liquidity assistant. Use tools to fetch live data when possible, but fall back to your general knowledge if tools fail or if the user asks for a general definition.\n"
         + (known_ids_context + "\n" if known_ids_context else "")
         + tool_catalog
     )
@@ -61,13 +61,12 @@ def build_agent_step_prompt(align_with_brief: bool = True) -> str:
         "TOOL <name> <json_args>\n"
         "Else, respond as: \n"
         "FINAL <answer>\n"
-        "Constraints: keep under 300 words; no invented numbers; cite IDs exactly.\n"
-        "If the question is definitional (e.g., 'what is X', 'define X', 'meaning of X'), FIRST fetch documentation via get_doc: \n"
-        "- If ambiguous (both), ask for clarification once instead of guessing.\n"
-        "If the documentation response is empty or missing content, respond with: \"I don't know based on registry docs. Please provide the canonical ID (indicator or series). Example: reserves_w (indicator), RESPPLLOPNWW (series).\"\n"
+        "Constraints: keep under 300 words; cite IDs exactly when using tools.\n"
+        "If the question is definitional (e.g., 'what is X', 'define X'), FIRST fetch documentation via get_doc. \n"
+        "- If the documentation response is empty or 'No doc found', do NOT loop. Instead, respond with FINAL and provide a general definition based on your training data (e.g. 'I couldn't find 'X' in the live database, but generally X refers to...').\n"
+        "If the user explicitly asks to ignore the database or 'without looking', skip tools and answer directly.\n"
         "Normalize tokens when matching KnownIDs: lowercase; strip punctuation; convert spaces/hyphens to underscores; accept minor obvious variants (e.g., 'netliq' -> 'net_liq').\n"
-        "After you receive a ToolResult for documentation, your NEXT response MUST be FINAL with a concise definition (1–2 sentences: what it is + why it matters). Do NOT call any more tools for a definitional query.\n"
-        "For definitional answers, avoid numbers unless they appear verbatim in the documentation. Prefer zero numbers.\n"
+        "After you receive a ToolResult for documentation, your NEXT response MUST be FINAL with a concise definition (1–2 sentences: what it is + why it matters).\n"
         "For history queries, use get_history {id, days?}. Server will use the native cadence; you do not need to specify one.\n"
     )
     if align_with_brief:

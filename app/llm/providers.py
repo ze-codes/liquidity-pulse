@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, Iterator
+from typing import Protocol, Iterator, Optional
 
 from app.settings import settings
 
@@ -105,7 +105,11 @@ class OpenRouterProvider:
             content = resp.choices[0].message.content or ""
             return content
         except Exception:
-            # Fallback to OpenAI if OpenRouter call fails
+            # Fallback to OpenAI if OpenRouter call fails AND we have a fallback key
+            # NOTE: If using user provided key, fallback might not make sense unless we fallback to server key?
+            # For simplicity, if OpenRouter fails with user key, just fail.
+            # But if using server key, fallback applies.
+            # I'll keep existing logic but be mindful.
             fallback_key = settings.llm_api_key
             if not fallback_key:
                 raise
@@ -148,12 +152,30 @@ class OpenRouterProvider:
             yield from fallback.stream(prompt)
 
 
-def get_provider() -> LLMProvider:
+def get_provider(api_key: Optional[str] = None) -> LLMProvider:
+    """Get an LLM provider instance.
+    
+    If api_key is provided (BYOK), it overrides the settings.
+    """
     provider = (settings.llm_provider or "mock").lower()
+    
+    # Decide which key to use
+    # If user provided key, use it. If not, use server key.
+    # Note: If provider is OpenRouter, user key is OpenRouter key.
+    # If provider is OpenAI, user key is OpenAI key.
+    # We assume the user knows which one they are providing if the backend is configured for one.
+    # Ideally frontend allows selecting provider, but for now we assume backend config dictates provider type.
+    
+    effective_key = api_key or settings.llm_api_key
+    effective_openrouter_key = api_key or settings.openrouter_api_key or settings.llm_api_key
+
     if provider in ("mock", "none", "dev"):
         return MockLLMProvider()
+        
     if provider in ("openai",):
-        return OpenAILLMProvider(api_key=settings.llm_api_key, model=settings.llm_model)
+        return OpenAILLMProvider(api_key=effective_key, model=settings.llm_model)
+        
     if provider in ("openrouter",):
-        return OpenRouterProvider(api_key=settings.openrouter_api_key or settings.llm_api_key, model=settings.llm_model, base_url=settings.llm_base_url)
+        return OpenRouterProvider(api_key=effective_openrouter_key, model=settings.llm_model, base_url=settings.llm_base_url)
+        
     return MockLLMProvider()

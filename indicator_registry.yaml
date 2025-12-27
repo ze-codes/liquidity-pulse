@@ -31,6 +31,10 @@
     By subtracting Treasury's cash (TGA) and MMF cash parked at Fed (RRP) from Fed total
     assets (WALCL), it estimates liquidity actually circulating in the financial system.
     Acts as a high-level "tide" that influences all risk assets.
+  impact: High — The "master equation" for US liquidity conditions.
+  interpretation: |
+    Rising Net Liquidity is generally supportive for risk assets (stocks, crypto), as more cash 
+    is available in the banking system. Falling Net Liquidity acts as a monetary brake.
   notes: Aggregate measure; avoid pairing with its components.
 
 - id: rrp_delta
@@ -48,7 +52,13 @@
   description: |
     The rate of change of RRP often has more immediate market impact than the level.
     A rapid fall signals a large pool of cash moving off the sidelines into markets,
-    typically starting with T-bills. This adds liquidity and fuels demand for riskier assets.
+    often to buy T-bills, effectively increasing net liquidity.
+  impact: Medium/High — Shows the velocity of cash re-entering the system.
+  interpretation: |
+    Negative delta (balance falling) means cash is leaving the RRP facility and entering the 
+    private market, which is supportive. Positive delta means cash is fleeing to safety (RRP), 
+    draining liquidity.
+  notes: High velocity drain is bullish.    typically starting with T-bills. This adds liquidity and fuels demand for riskier assets.
     Key high-frequency signal of changing risk appetite.
   notes: Component of net_liq; also related to floor tightness.
 
@@ -69,6 +79,10 @@
     A rapid TGA increase (around tax deadlines or large auctions) quickly drains
     tens or hundreds of billions in liquidity. Conversely, rapid drawdown injects cash.
     The 5-day delta captures these impactful flows.
+  impact: Medium — Short-term liquidity shock factor.
+  interpretation: |
+    Falling TGA (negative delta) is supportive (injects cash). 
+    Rising TGA (positive delta) is draining (withdraws cash).
   notes: Component of net_liq; fiscal drain/add.
 
 - id: reserves_w
@@ -87,6 +101,10 @@
     Bank reserves are the lifeblood of financial plumbing. An increase makes it easier
     for banks to lend, settle payments, and absorb Treasury issuance. The weekly change
     is a direct read on the liquidity position of the banking system.
+  impact: High — Direct measure of bank lending capacity.
+  interpretation: |
+    Positive delta means liquidity is expanding (supportive). 
+    Negative delta means liquidity is contracting (restrictive).
   notes: Bank system liquidity; overlaps with QT pace.
 
 - id: qt_pace
@@ -105,6 +123,10 @@
     When Fed holdings mature, the principal is extinguished, removing money from the system.
     Tracking runoff pace vs announced caps confirms whether this structural headwind
     is operating as expected.
+  impact: High — A consistent, programmatic withdrawal of base money.
+  interpretation: |
+    Running at or near caps confirms maximum liquidity withdrawal (restrictive). 
+    Falling significantly below caps suggests slower-than-expected tightening (less restrictive).
   notes: Mechanical drain that often manifests as lower reserves.
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -127,6 +149,10 @@
     SOFR reflects market-determined cost of borrowing cash against Treasury collateral.
     If SOFR trades consistently above IORB, demand for cash outstrips supply in repo —
     a clear sign of funding stress and tightening conditions.
+  impact: High — A primary signal of systemic collateral scarcity or cash shortage.
+  interpretation: |
+    SOFR > IORB means cash is scarce relative to collateral (tightening). 
+    SOFR < IORB means cash is abundant (supportive).
   notes: Canonical floor tightness proxy.
 
 - id: bill_iorb
@@ -144,6 +170,10 @@
     When bill yields exceed IORB materially, it signals arbitrage opportunities
     that pull cash from Fed facilities into the market. MMFs move cash from RRP into
     bills, reducing floor usage and supporting broader risk appetite.
+  impact: Medium — Incentivizes cash migration from RRP to private markets.
+  interpretation: |
+    Bill yields significantly above IORB attract MMF cash, draining RRP and increasing net liquidity (supportive). 
+    Bill yields below IORB encourage parking cash at the Fed (neutral/draining).
   notes: Bills vs IORB spread; measures T-bill attractiveness vs Fed rates.
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -167,6 +197,10 @@
     Aligns to the actual, lumpy settlement cadence that drives funding conditions.
     Large positive nets (heavy issuance relative to returns) are draining;
     negative nets are supportive.
+  impact: High — The actual cash call on the private sector.
+  interpretation: |
+    Positive net settlements (Issuance > Redemptions + Interest) drain liquidity (restrictive). 
+    Negative net settlements inject liquidity back into the market (supportive).
   notes: Weekly net cash call = Issues − Redemptions − Interest by settlement week.
 
 - id: bill_share_w
@@ -185,6 +219,10 @@
     so they're less draining than long-term coupons which require duration-taking investors
     to sell other assets. Higher bill share = less of a headwind for markets.
     Typical range: 70-85%.
+  impact: Medium — Affects the "quality" of the liquidity drain.
+  interpretation: |
+    Higher bill share (>75%) means issuance is easily absorbed by MMFs (neutral/supportive). 
+    Lower bill share means heavy coupon issuance, which strains dealer balance sheets (restrictive).
   notes: Weekly % of issuance that is bills. Higher = shorter duration = less liquidity drain.
 
 - id: settle_intensity
@@ -202,6 +240,10 @@
     Large, concentrated settlements of Treasury coupon auctions cause temporary but acute
     liquidity drains on specific days. Monitoring weekly intensity identifies periods
     where "lumpy" cash demand could tighten funding conditions.
+  impact: Medium/High (Transient) — Can cause intraday/intraweek repo spikes.
+  interpretation: |
+    High intensity weeks see large cash outflows from the banking system to the TGA, temporarily tightening conditions. 
+    Low intensity weeks allow liquidity to circulate more freely.
   notes: Timing detail of supply; avoid stacking with net cash flow.
 
 - id: ust_redemptions_w
@@ -220,6 +262,10 @@
     Weekly aggregate of public redemptions (marketable + savings securities).
     Redemptions reduce TGA and inject cash back into the system, supporting liquidity.
     Elevated redemptions can offset issuance drains in the same window.
+  impact: High (Supportive) — Cash injection vector.
+  interpretation: |
+    Higher redemptions mean more cash returning to investors (supportive). 
+    Low redemptions mean less natural offset to issuance.
   notes: Cash returning to market from maturing securities.
 
 - id: ust_interest_w
@@ -237,6 +283,10 @@
   description: |
     Weekly aggregate of coupon and interest payments from Treasury to holders.
     Direct cash injections that reduce TGA and support private sector liquidity.
+  impact: Medium (Supportive) — Regular cash injection.
+  interpretation: |
+    Interest payments are a pure injection of new money (from TGA to private sector). 
+    Mid-month and end-month coupon payments provide predictable liquidity support.
   notes: Reduces TGA, injects cash.
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -258,6 +308,10 @@
     The Treasury market is the bedrock of the global financial system. If it's illiquid
     or stressed, all other markets suffer. This OFR index aggregates multiple measures
     of market functioning (bid-ask spreads, order depth) into a single reliable indicator.
+  impact: High — Signal of systemic plumbing failure.
+  interpretation: |
+    Rising index means deteriorating market depth and higher trading costs (stress). 
+    Spikes often correlate with risk-off events and deleveraging.
   notes: Canonical UST market liquidity stress proxy.
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEFERRED (post-MVP) — Commented out but documented for future use

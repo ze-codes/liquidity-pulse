@@ -8,6 +8,7 @@ import {
   DetailsPanel,
   Chart,
   Footer,
+  ChatWidget,
 } from "@/components";
 import { useRegistry } from "@/hooks/useRegistry";
 import { useChart } from "@/hooks/useChart";
@@ -31,7 +32,7 @@ export default function Home() {
     clearChart,
   } = useChart({ getUnits });
 
-  // Selection for relationship explorer (hover/click to show relationships)
+  // Focus for relationship explorer (shows relationships in Details panel)
   const [selection, setSelection] = useState<Selection>({
     mode: null,
     id: null,
@@ -46,29 +47,43 @@ export default function Home() {
     return seriesList.find((s) => s.id === selection.id) || null;
   }, [selection, indicators, seriesList]);
 
-  // Handle selection - shows relationships AND toggles chart
-  const handleSelectIndicator = (id: string) => {
-    toggleIndicator(id);
+  // Focus handlers (Details only; does NOT affect chart)
+  const handleFocusIndicator = (id: string) => {
     if (selection.mode === "indicator" && selection.id === id) {
       setSelection({ mode: null, id: null });
-    } else {
-      setSelection({ mode: "indicator", id });
+      return;
     }
+    setSelection({ mode: "indicator", id });
   };
 
-  const handleSelectSeries = (id: string) => {
-    toggleSeries(id);
+  const handleFocusSeries = (id: string) => {
     if (selection.mode === "series" && selection.id === id) {
       setSelection({ mode: null, id: null });
-    } else {
-      setSelection({ mode: "series", id });
+      return;
     }
+    setSelection({ mode: "series", id });
+  };
+
+  // Chart toggles (Chart only; does NOT affect Details)
+  const handleToggleChartIndicator = (id: string) => {
+    toggleIndicator(id);
+  };
+
+  const handleToggleChartSeries = (id: string) => {
+    toggleSeries(id);
   };
 
   // For navigating in details panel (just show relationships, don't toggle chart)
   const handleNavigate = (mode: SelectionMode, id: string | null) => {
     setSelection({ mode, id });
   };
+
+  const focusedIsCharted = useMemo(() => {
+    if (!selection.id || !selection.mode) return false;
+    if (selection.mode === "indicator")
+      return chartIndicators.has(selection.id);
+    return chartSeries.has(selection.id);
+  }, [selection, chartIndicators, chartSeries]);
 
   return (
     <main className="min-h-screen bg-[#0a0f1a] text-[#e2e8f0]">
@@ -111,7 +126,9 @@ export default function Home() {
               <IndicatorList
                 indicators={indicators}
                 chartIndicators={chartIndicators}
-                onSelect={handleSelectIndicator}
+                focusedId={selection.mode === "indicator" ? selection.id : null}
+                onFocus={handleFocusIndicator}
+                onToggleChart={handleToggleChartIndicator}
               />
             </div>
 
@@ -121,7 +138,9 @@ export default function Home() {
                 groupedSeries={groupedSeries}
                 chartSeries={chartSeries}
                 totalCount={seriesList.length}
-                onSelect={handleSelectSeries}
+                focusedId={selection.mode === "series" ? selection.id : null}
+                onFocus={handleFocusSeries}
+                onToggleChart={handleToggleChartSeries}
               />
             </div>
 
@@ -130,6 +149,7 @@ export default function Home() {
               <DetailsPanel
                 selection={selection}
                 selectedItem={selectedItem}
+                isCharted={focusedIsCharted}
                 indicators={indicators}
                 seriesList={seriesList}
                 onNavigate={handleNavigate}
@@ -151,6 +171,9 @@ export default function Home() {
 
         <Footer />
       </div>
+
+      {/* Floating Chat Widget */}
+      <ChatWidget />
     </main>
   );
 }
