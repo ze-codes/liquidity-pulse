@@ -1,41 +1,42 @@
-up:
-	docker compose up -d --build
+# =============================================================================
+# API (Python)
+# =============================================================================
 
-down:
-	docker compose down
+run:
+	uvicorn api.main:app --reload --port 8000
 
-logs:
-	docker compose logs -f api db
-
-rebuild:
-	docker compose build --no-cache api
-
-shell:
-	docker compose exec api bash
-
-load-registry:
-	docker compose exec api bash -lc "python -m app.registry_loader registry.yaml"
-
-fetch-core:
-	# Optional: pass FETCH_PAGES and FETCH_LIMIT to throttle fetch sizes for debugging
-	docker compose exec -e FETCH_PAGES -e FETCH_LIMIT api bash -lc "python -m app.cli_fetch"
+install:
+	pip install -r requirements.txt
 
 test:
-	pytest -q | cat
+	pytest -q
 
-test-api:
-	docker compose exec api bash -lc "pytest -q $(TESTS) | cat"
+fmt:
+	black api/ app/ tests/
+	isort api/ app/ tests/
 
-test-up: 
-	docker compose -f docker-compose.test.yml up -d
+clean-cache:
+	rm -rf cache/series/*.csv
 
-test-down:
-	docker compose -f docker-compose.test.yml down -v
+# =============================================================================
+# Frontend (Next.js)
+# =============================================================================
 
-test-migrate:
-	bash -lc "source .venv/bin/activate && DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/invest_test alembic upgrade head | cat"
+fe-install:
+	cd frontend && npm install
 
-test-run:
-	bash -lc "source .venv/bin/activate && DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/invest_test pytest -q | cat"
+fe-dev:
+	cd frontend && npm run dev
 
+fe-build:
+	cd frontend && npm run build
 
+# =============================================================================
+# Development (run both)
+# =============================================================================
+
+# Run API and frontend together (requires 2 terminals or use & for background)
+dev:
+	@echo "Run in separate terminals:"
+	@echo "  Terminal 1: make run"
+	@echo "  Terminal 2: make fe-dev"

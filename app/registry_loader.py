@@ -8,7 +8,7 @@ from .db import SessionLocal
 
 
 def load_registry_yaml(path: str) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
-    """Load indicators and optional series_registry from registry.yaml.
+    """Load indicators and optional series_registry from indicator_registry.yaml.
 
     Supports either:
     - single-document YAML as a list (indicators only), or
@@ -31,7 +31,7 @@ def load_registry_yaml(path: str) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[
             if "series_registry" in doc and isinstance(doc["series_registry"], dict):
                 series_meta.update(doc["series_registry"])  # type: ignore[arg-type]
     if not indicators and not series_meta:
-        raise ValueError("registry.yaml does not contain indicator or series entries")
+        raise ValueError("indicator_registry.yaml does not contain indicator or series entries")
     return indicators, series_meta
 
 
@@ -90,7 +90,7 @@ def upsert_series_registry(db: Session, entries: Dict[str, Dict[str, Any]]) -> i
     return count
 
 def main() -> None:
-    path = sys.argv[1] if len(sys.argv) > 1 else "registry.yaml"
+    path = sys.argv[1] if len(sys.argv) > 1 else "indicator_registry.yaml"
     session = SessionLocal()
     try:
         ind, series_meta = load_registry_yaml(path)

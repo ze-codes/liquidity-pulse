@@ -3,6 +3,7 @@
   category: core_plumbing
   series: [WALCL, TGA, RRPONTSYD]
   cadence: daily
+  units: USD
   directionality: higher_is_supportive
   scoring: z
   z_cutoff: 1.0
@@ -16,6 +17,7 @@
   category: core_plumbing
   series: [RRPONTSYD]
   cadence: daily
+  units: USD
   directionality: lower_is_supportive
   scoring: z
   z_cutoff: 1.0
@@ -29,6 +31,7 @@
   category: core_plumbing
   series: [TGA]
   cadence: daily
+  units: USD
   directionality: higher_is_draining
   scoring: z
   z_cutoff: 1.0
@@ -42,6 +45,7 @@
   category: core_plumbing
   series: [RESPPLLOPNWW]
   cadence: weekly
+  units: USD
   directionality: higher_is_supportive
   scoring: z
   z_cutoff: 1.0
@@ -55,6 +59,7 @@
   category: qt_qe
   series: [WSHOSHO, WSHOMCB]
   cadence: weekly
+  units: USD
   directionality: higher_is_draining
   scoring: threshold
   persistence: 1
@@ -67,6 +72,7 @@
   category: floor
   series: [SOFR, IORB]
   cadence: daily
+  units: bps
   directionality: higher_is_draining
   scoring: threshold
   persistence: 3
@@ -79,31 +85,20 @@
   category: floor
   series: [DTB3, DTB4WK, IORB]
   cadence: daily
-  directionality: higher_is_supportive
-  scoring: threshold
-  persistence: 2
-  trigger_default: "> +25 bps => RRP drain likely"
-  duplicates_of: bill_rrp
-  notes: Bills competing for cash; same concept bucket as floor tightness.
-
-# New root floor spread anchored on the RRP admin rate (MMF arbitrage anchor)
-- id: bill_rrp
-  name: 1–3m bill - RRP (bps)
-  category: floor
-  series: [BILL_RRP_BPS]
-  cadence: daily
+  units: bps
   directionality: higher_is_supportive
   scoring: threshold
   persistence: 2
   trigger_default: "> +25 bps => RRP drain likely"
   duplicates_of:
-  notes: Preferred floor anchor; MMFs arbitrage vs RRP. bill_iorb duplicates this.
+  notes: Bills vs IORB spread; measures T-bill attractiveness vs Fed rates.
 
 - id: ust_net_w
   name: Net UST settlements (weekly)
   category: supply
   series: [UST_NET_SETTLE_W]
   cadence: weekly
+  units: USD
   directionality: higher_is_draining
   scoring: z
   z_cutoff: 1.0
@@ -112,23 +107,25 @@
   duplicates_of:
   notes: Weekly net cash call = Issues − Redemptions − Interest by settlement week.
 
-- id: bill_share
-  name: Bill share of issuance (%)
+- id: bill_share_w
+  name: Bill share of issuance (weekly %)
   category: supply
-  series: [UST_AUCTION_OFFERINGS]
-  cadence: daily
+  series: [UST_BILL_SHARE]
+  cadence: weekly
+  units: percent
   directionality: higher_is_supportive
   scoring: threshold
   persistence: 1
-  trigger_default: ">= 65% => less drain"
+  trigger_default: "< 70% => heavy coupon week, more drain"
   duplicates_of: ust_net_w
-  notes: Modulates drain intensity already reflected in net cash flow.
+  notes: Weekly % of issuance that is bills. Higher = shorter duration = less liquidity drain. Typical range 70-85%.
 
 - id: settle_intensity
   name: Coupon settlement intensity (weekly $)
   category: supply
   series: [UST_AUCTION_ISSUES]
   cadence: weekly
+  units: USD
   directionality: higher_is_draining
   scoring: threshold
   persistence: 1
@@ -136,32 +133,34 @@
   duplicates_of: ust_net_w
   notes: Timing detail of supply; avoid stacking with net cash flow.
 
-# New supportive flows (raw components)
-- id: ust_redemptions
-  name: Treasury redemptions (daily)
+# New supportive flows (raw components) - weekly aggregates
+- id: ust_redemptions_w
+  name: Treasury redemptions (weekly)
   category: supply
   series: [UST_REDEMPTIONS]
-  cadence: daily
+  cadence: weekly
+  units: USD
   directionality: higher_is_supportive
   scoring: z
   z_cutoff: 1.0
   persistence: 1
-  trigger_default: "higher daily redemptions => supportive"
+  trigger_default: "higher weekly redemptions => supportive"
   duplicates_of: ust_net_w
-  notes: Public redemptions only (marketable + savings); excludes intragovernmental (e.g., GAS/FFB/SLGS).
+  notes: Weekly aggregate of public redemptions (marketable + savings). Cash returning to market.
 
-- id: ust_interest
-  name: Treasury interest/coupon outlays (daily)
+- id: ust_interest_w
+  name: Treasury interest/coupon outlays (weekly)
   category: supply
   series: [UST_INTEREST]
-  cadence: daily
+  cadence: weekly
+  units: USD
   directionality: higher_is_supportive
   scoring: z
   z_cutoff: 1.0
   persistence: 1
-  trigger_default: "higher coupon/interest outlays => supportive"
+  trigger_default: "higher weekly interest outlays => supportive"
   duplicates_of: ust_net_w
-  notes: Interest on Treasury securities; reduces TGA, injects cash.
+  notes: Weekly aggregate of interest payments. Reduces TGA, injects cash.
 
 ### Deferred (post‑MVP) — Banking (H.8)
 # - id: h8_deposits
@@ -195,6 +194,7 @@
   category: stress
   series: [OFR_LIQ_IDX]
   cadence: daily
+  units: index
   directionality: higher_is_draining
   scoring: threshold
   persistence: 1

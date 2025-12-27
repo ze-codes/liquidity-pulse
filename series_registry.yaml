@@ -1,140 +1,154 @@
-# Series registry metadata — source of truth for series cadence/units/scale/source
-# Use with: python -m app.registry_loader series_registry.yaml
+# Series registry — source of truth for series metadata
+# Updated to match actual working logic in live.py
 ---
-series_registry:
+series:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FRED Series
+  # ═══════════════════════════════════════════════════════════════════════════
   WALCL:
-    {
-      cadence: weekly,
-      units: USD,
-      scale: 1e6,
-      source: FRED/H.4.1,
-      notes: "Fed total assets",
-    }
+    source: FRED
+    cadence: weekly
+    units: USD
+    raw_scale: 1e6 # FRED returns in millions
+    output_scale: 1 # We convert to actual dollars
+    notes: Fed total assets (H.4.1)
+
   RESPPLLOPNWW:
-    {
-      cadence: weekly,
-      units: USD,
-      scale: 1e6,
-      source: H.4.1,
-      notes: "Reserve balances",
-    }
+    source: FRED
+    cadence: weekly
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    notes: Reserve balances (H.4.1)
+
   RRPONTSYD:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1e6,
-      source: FRED/ON RRP,
-      notes: "ON RRP outstanding",
-    }
-  TGA:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1e6,
-      source: DTS,
-      notes: "Treasury General Account",
-    }
+    source: FRED
+    cadence: daily
+    units: USD
+    raw_scale: 1e9 # FRED returns in billions
+    output_scale: 1
+    notes: ON RRP outstanding
+
   SOFR:
-    {
-      cadence: daily,
-      units: percent,
-      scale: 1.0,
-      source: SOFR,
-      notes: "repo benchmark",
-    }
+    source: FRED
+    cadence: daily
+    units: percent
+    raw_scale: 1
+    output_scale: 1
+    notes: Secured overnight financing rate
+
   IORB:
-    {
-      cadence: daily,
-      units: percent,
-      scale: 1.0,
-      source: Fed admin,
-      notes: "stepwise",
-    }
-  RRP_RATE:
-    {
-      cadence: daily,
-      units: percent,
-      scale: 1.0,
-      source: Fed admin,
-      notes: "stepwise",
-    }
+    source: FRED
+    cadence: daily
+    units: percent
+    raw_scale: 1
+    output_scale: 1
+    notes: Interest on reserve balances (Fed admin rate)
+
   DTB3:
-    {
-      cadence: daily,
-      units: percent,
-      scale: 1.0,
-      source: Treasury,
-      notes: "3m bill",
-    }
+    source: FRED
+    cadence: daily
+    units: percent
+    raw_scale: 1
+    output_scale: 1
+    notes: 3-month T-bill rate
+
   DTB4WK:
-    {
-      cadence: daily,
-      units: percent,
-      scale: 1.0,
-      source: Treasury,
-      notes: "4w bill",
-    }
+    source: FRED
+    cadence: daily
+    units: percent
+    raw_scale: 1
+    output_scale: 1
+    notes: 4-week T-bill rate
+
   WSHOSHO:
-    {
-      cadence: weekly,
-      units: USD,
-      scale: 1e6,
-      source: H.4.1,
-      notes: "UST holdings",
-    }
+    source: FRED
+    cadence: weekly
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    notes: Fed UST holdings (H.4.1)
+
   WSHOMCB:
-    {
-      cadence: weekly,
-      units: USD,
-      scale: 1e6,
-      source: H.4.1,
-      notes: "MBS holdings",
-    }
-  UST_AUCTION_OFFERINGS:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1.0,
-      source: DTS,
-      notes: "sum by auction_date",
-    }
-  UST_AUCTION_ISSUES:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1.0,
-      source: DTS,
-      notes: "sum by issue_date",
-    }
+    source: FRED
+    cadence: weekly
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    notes: Fed MBS holdings (H.4.1)
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Treasury DTS Series (Daily Treasury Statement)
+  # ═══════════════════════════════════════════════════════════════════════════
+  TGA:
+    source: TREASURY_TGA
+    cadence: daily
+    units: USD
+    raw_scale: 1e6 # DTS returns in millions
+    output_scale: 1
+    notes: Treasury General Account closing balance
+
   UST_REDEMPTIONS:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1.0,
-      source: DTS,
-      notes: "marketable + savings only",
-    }
+    source: TREASURY_REDEMPTIONS
+    cadence: daily
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    notes: Public debt redemptions (marketable + savings)
+
   UST_INTEREST:
-    {
-      cadence: daily,
-      units: USD,
-      scale: 1.0,
-      source: DTS,
-      notes: "interest/coupon outlays",
-    }
-  UST_NET_SETTLE_W:
-    {
-      cadence: weekly,
-      units: USD,
-      scale: 1.0,
-      source: DERIVED,
-      notes: "issues - redemptions - interest",
-    }
+    source: TREASURY_INTEREST
+    cadence: daily
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    notes: Interest on Treasury securities (coupon outlays)
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Treasury Auction Series
+  # ═══════════════════════════════════════════════════════════════════════════
+  UST_AUCTION_ISSUES:
+    source: TREASURY_AUCTIONS
+    cadence: daily
+    units: USD
+    raw_scale: 1 # Auctions API returns actual dollars
+    output_scale: 1
+    notes: Auction settlements by issue_date
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Derived/Computed Series (aggregated from raw series)
+  # ═══════════════════════════════════════════════════════════════════════════
+  UST_REDEMPTIONS_W:
+    source: DERIVED
+    base_series: UST_REDEMPTIONS
+    aggregation: weekly_sum
+    cadence: weekly
+    units: USD
+    notes: Weekly aggregate of UST_REDEMPTIONS
+
+  UST_INTEREST_W:
+    source: DERIVED
+    base_series: UST_INTEREST
+    aggregation: weekly_sum
+    cadence: weekly
+    units: USD
+    notes: Weekly aggregate of UST_INTEREST
+
+  UST_BILL_SHARE:
+    source: DERIVED
+    base_series: UST_AUCTION_ISSUES
+    aggregation: weekly_bill_pct
+    cadence: weekly
+    units: percent
+    notes: Weekly bill share of total issuance
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # OFR Series
+  # ═══════════════════════════════════════════════════════════════════════════
   OFR_LIQ_IDX:
-    {
-      cadence: daily,
-      units: index,
-      scale: 1.0,
-      source: OFR,
-      notes: "UST liquidity stress",
-    }
+    source: OFR
+    cadence: daily
+    units: index
+    raw_scale: 1
+    output_scale: 1
+    notes: OFR UST Liquidity Stress Index

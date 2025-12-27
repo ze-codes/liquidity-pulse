@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_agent: bool = True  # enable agentic tool use for /llm/ask
     llm_use_tools: bool = True  # use OpenRouter function-calling loop
+    # Cache config
+    cache_disabled: bool = False  # set CACHE_DISABLED=true to disable
+    cache_ttl_seconds: int = 3600  # 1 hour default
+    cache_dir: str = "./cache"  # directory for CSV cache files
 
     class Config:
         env_file = ".env"

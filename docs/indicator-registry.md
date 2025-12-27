@@ -1,10 +1,10 @@
 ## Indicator Registry — Explainer
 
-This document explains each series (raw data) and each indicator in `registry.yaml`: definition, why it matters, directionality, cadence, and default trigger. It also describes concept buckets (via `duplicates_of`).
+This document explains each series (raw data) and each indicator in `indicator_registry.yaml`: definition, why it matters, directionality, cadence, and default trigger. It also describes concept buckets (via `duplicates_of`).
 
 Note on canonical source of truth
 
-- `registry.yaml` is the authoritative source for series/indicator IDs and metadata used by the app.
+- `indicator_registry.yaml` is the authoritative source for indicator IDs and metadata used by the app.
 - This document is the maintained explainer that describes the semantics, scoring, and operations for those entries.
 - The older `series-contracts.md` has been consolidated into this document.
 

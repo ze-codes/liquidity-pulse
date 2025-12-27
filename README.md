@@ -25,7 +25,7 @@ Remote-first Docker dev for use with Cursor Remote-SSH on a cloud VM. Includes a
 4. Apply DB migrations (inside the api container):
    docker compose exec api bash -lc "alembic upgrade head"
 5. Load indicator/series registry metadata:
-   # Loads indicators from registry.yaml; also loads series_registry if present in the YAML
+   # Loads indicators from indicator_registry.yaml; also loads series_registry if present in the YAML
    make load-registry
    # To load a standalone series_registry YAML file instead:
    docker compose exec api bash -lc "python -m app.registry_loader series_registry.yaml"
@@ -43,7 +43,7 @@ Remote-first Docker dev for use with Cursor Remote-SSH on a cloud VM. Includes a
 - Right sidebar "Liquidity Assistant" chat (SSE stream): brief + ask, raw stream log, answer pane.
 - Root redirect to `/static/viz_indicators.html`.
 - Access logging middleware: timestamp, client IP, method, path, status, duration, user-agent.
-- Unified indicator/series metadata via `registry.yaml` (+ optional `series_registry.yaml`).
+- Unified indicator/series metadata via `indicator_registry.yaml` (+ optional `series_registry.yaml`).
 
 ## Endpoints
 
@@ -61,7 +61,7 @@ Remote-first Docker dev for use with Cursor Remote-SSH on a cloud VM. Includes a
 - `make logs` — follow api/db logs
 - `make rebuild` — rebuild api image without cache
 - `make shell` — shell into api container
-- `make load-registry` — load `registry.yaml` (and embedded `series_registry` if present)
+- `make load-registry` — load `indicator_registry.yaml` (and embedded `series_registry` if present)
 - `make fetch-core` — optional data fetcher (supports FETCH_PAGES, FETCH_LIMIT)
 - `make test` — run tests
 

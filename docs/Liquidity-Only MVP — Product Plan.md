@@ -486,4 +486,4 @@ For complete, canonical definitions (series, directionality, triggers, buckets),
 
 ### Starter registry
 
-The registry is maintained in one place: `registry.yaml`. Refer to that file for the live list.
+The registry is maintained in one place: `indicator_registry.yaml`. Refer to that file for the live list.
