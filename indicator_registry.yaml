@@ -1,3 +1,19 @@
+# Indicator Registry — Source of truth for computed indicator metadata
+# Each indicator combines raw series into a meaningful liquidity signal
+# This file is read by the backend API (live.py) and can be exposed to LLM context
+#
+# Key fields:
+# - id: Canonical indicator ID used in code and APIs
+# - series: Source series IDs (raw data inputs from series_registry.yaml)
+# - cadence: Update frequency (daily, weekly)
+# - directionality: higher_is_supportive | higher_is_draining | lower_is_supportive
+# - scoring: z (z20 window) | threshold (deterministic)
+# - duplicates_of: Concept bucket root to avoid double-counting similar mechanisms
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# CORE PLUMBING — Fed balance sheet and reserve flows
+# ═══════════════════════════════════════════════════════════════════════════════
+
 - id: net_liq
   name: Net Liquidity (WALCL - TGA - RRP)
   category: core_plumbing
@@ -10,6 +26,11 @@
   persistence: 2
   trigger_default: "z20 >= +1 => supportive"
   duplicates_of:
+  description: |
+    The most comprehensive top-down measure of liquidity available to the private sector.
+    By subtracting Treasury's cash (TGA) and MMF cash parked at Fed (RRP) from Fed total
+    assets (WALCL), it estimates liquidity actually circulating in the financial system.
+    Acts as a high-level "tide" that influences all risk assets.
   notes: Aggregate measure; avoid pairing with its components.
 
 - id: rrp_delta
@@ -24,6 +45,11 @@
   persistence: 2
   trigger_default: "Δ <= -100e9 over 5d => supportive"
   duplicates_of: net_liq
+  description: |
+    The rate of change of RRP often has more immediate market impact than the level.
+    A rapid fall signals a large pool of cash moving off the sidelines into markets,
+    typically starting with T-bills. This adds liquidity and fuels demand for riskier assets.
+    Key high-frequency signal of changing risk appetite.
   notes: Component of net_liq; also related to floor tightness.
 
 - id: tga_delta
@@ -38,6 +64,11 @@
   persistence: 2
   trigger_default: "+75e9/5d => draining"
   duplicates_of: net_liq
+  description: |
+    The change in TGA balance is a direct, high-frequency driver of bank reserves.
+    A rapid TGA increase (around tax deadlines or large auctions) quickly drains
+    tens or hundreds of billions in liquidity. Conversely, rapid drawdown injects cash.
+    The 5-day delta captures these impactful flows.
   notes: Component of net_liq; fiscal drain/add.
 
 - id: reserves_w
@@ -52,6 +83,10 @@
   persistence: 2
   trigger_default: "+25e9/w => supportive"
   duplicates_of: net_liq
+  description: |
+    Bank reserves are the lifeblood of financial plumbing. An increase makes it easier
+    for banks to lend, settle payments, and absorb Treasury issuance. The weekly change
+    is a direct read on the liquidity position of the banking system.
   notes: Bank system liquidity; overlaps with QT pace.
 
 - id: qt_pace
@@ -65,7 +100,16 @@
   persistence: 1
   trigger_default: "@cap => headwind"
   duplicates_of: reserves_w
+  description: |
+    Quantitative Tightening (QT) is a persistent, mechanical drain on liquidity.
+    When Fed holdings mature, the principal is extinguished, removing money from the system.
+    Tracking runoff pace vs announced caps confirms whether this structural headwind
+    is operating as expected.
   notes: Mechanical drain that often manifests as lower reserves.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MONEY MARKET FLOOR — Rate spreads and funding conditions
+# ═══════════════════════════════════════════════════════════════════════════════
 
 - id: sofr_iorb
   name: SOFR - IORB (bps)
@@ -78,6 +122,11 @@
   persistence: 3
   trigger_default: "> 0 bps persistent => tight"
   duplicates_of:
+  description: |
+    Key proxy for money market tightness. IORB is the Fed-administered floor rate.
+    SOFR reflects market-determined cost of borrowing cash against Treasury collateral.
+    If SOFR trades consistently above IORB, demand for cash outstrips supply in repo —
+    a clear sign of funding stress and tightening conditions.
   notes: Canonical floor tightness proxy.
 
 - id: bill_iorb
@@ -91,12 +140,20 @@
   persistence: 2
   trigger_default: "> +25 bps => RRP drain likely"
   duplicates_of:
+  description: |
+    When bill yields exceed IORB materially, it signals arbitrage opportunities
+    that pull cash from Fed facilities into the market. MMFs move cash from RRP into
+    bills, reducing floor usage and supporting broader risk appetite.
   notes: Bills vs IORB spread; measures T-bill attractiveness vs Fed rates.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TREASURY SUPPLY — Issuance, settlements, and cash flows
+# ═══════════════════════════════════════════════════════════════════════════════
 
 - id: ust_net_w
   name: Net UST settlements (weekly)
   category: supply
-  series: [UST_NET_SETTLE_W]
+  series: [UST_AUCTION_ISSUES, UST_REDEMPTIONS, UST_INTEREST]
   cadence: weekly
   units: USD
   directionality: higher_is_draining
@@ -105,12 +162,17 @@
   persistence: 2
   trigger_default: "> +80–100e9/w => drain"
   duplicates_of:
+  description: |
+    Consolidates Treasury cash flows into weekly net: Issues − Redemptions − Interest.
+    Aligns to the actual, lumpy settlement cadence that drives funding conditions.
+    Large positive nets (heavy issuance relative to returns) are draining;
+    negative nets are supportive.
   notes: Weekly net cash call = Issues − Redemptions − Interest by settlement week.
 
 - id: bill_share_w
   name: Bill share of issuance (weekly %)
   category: supply
-  series: [UST_BILL_SHARE]
+  series: [UST_AUCTION_ISSUES]
   cadence: weekly
   units: percent
   directionality: higher_is_supportive
@@ -118,7 +180,12 @@
   persistence: 1
   trigger_default: "< 70% => heavy coupon week, more drain"
   duplicates_of: ust_net_w
-  notes: Weekly % of issuance that is bills. Higher = shorter duration = less liquidity drain. Typical range 70-85%.
+  description: |
+    Not all issuance is equal. Short-term T-bills are often bought by MMFs with excess cash,
+    so they're less draining than long-term coupons which require duration-taking investors
+    to sell other assets. Higher bill share = less of a headwind for markets.
+    Typical range: 70-85%.
+  notes: Weekly % of issuance that is bills. Higher = shorter duration = less liquidity drain.
 
 - id: settle_intensity
   name: Coupon settlement intensity (weekly $)
@@ -131,9 +198,12 @@
   persistence: 1
   trigger_default: "> +80e9/w => watch"
   duplicates_of: ust_net_w
+  description: |
+    Large, concentrated settlements of Treasury coupon auctions cause temporary but acute
+    liquidity drains on specific days. Monitoring weekly intensity identifies periods
+    where "lumpy" cash demand could tighten funding conditions.
   notes: Timing detail of supply; avoid stacking with net cash flow.
 
-# New supportive flows (raw components) - weekly aggregates
 - id: ust_redemptions_w
   name: Treasury redemptions (weekly)
   category: supply
@@ -146,7 +216,11 @@
   persistence: 1
   trigger_default: "higher weekly redemptions => supportive"
   duplicates_of: ust_net_w
-  notes: Weekly aggregate of public redemptions (marketable + savings). Cash returning to market.
+  description: |
+    Weekly aggregate of public redemptions (marketable + savings securities).
+    Redemptions reduce TGA and inject cash back into the system, supporting liquidity.
+    Elevated redemptions can offset issuance drains in the same window.
+  notes: Cash returning to market from maturing securities.
 
 - id: ust_interest_w
   name: Treasury interest/coupon outlays (weekly)
@@ -160,34 +234,14 @@
   persistence: 1
   trigger_default: "higher weekly interest outlays => supportive"
   duplicates_of: ust_net_w
-  notes: Weekly aggregate of interest payments. Reduces TGA, injects cash.
+  description: |
+    Weekly aggregate of coupon and interest payments from Treasury to holders.
+    Direct cash injections that reduce TGA and support private sector liquidity.
+  notes: Reduces TGA, injects cash.
 
-### Deferred (post‑MVP) — Banking (H.8)
-# - id: h8_deposits
-#   name: H.8 Deposits 1w Δ
-#   category: banking
-#   series: [H8_DEPOSITS]
-#   cadence: weekly
-#   directionality: lower_is_draining
-#   scoring: z
-#   z_cutoff: 1.0
-#   persistence: 2
-#   trigger_default: "<= -50e9/w => tight"
-#   duplicates_of:
-#   notes: Deferred to reduce scope for MVP.
-
-# - id: h8_secs
-#   name: H.8 Securities 1w Δ
-#   category: banking
-#   series: [H8_SECURITIES]
-#   cadence: weekly
-#   directionality: lower_is_draining
-#   scoring: z
-#   z_cutoff: 1.0
-#   persistence: 2
-#   trigger_default: "<= -25e9/w => watch"
-#   duplicates_of: h8_deposits
-#   notes: Deferred post‑MVP.
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRESS — Market functioning indicators
+# ═══════════════════════════════════════════════════════════════════════════════
 
 - id: ofr_liq_idx
   name: OFR UST Liquidity Stress Index
@@ -200,94 +254,80 @@
   persistence: 1
   trigger_default: "> 80th pct => illiquid"
   duplicates_of:
+  description: |
+    The Treasury market is the bedrock of the global financial system. If it's illiquid
+    or stressed, all other markets suffer. This OFR index aggregates multiple measures
+    of market functioning (bid-ask spreads, order depth) into a single reliable indicator.
   notes: Canonical UST market liquidity stress proxy.
-### Deferred (post‑MVP) — Floor backstops
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEFERRED (post-MVP) — Commented out but documented for future use
+# ═══════════════════════════════════════════════════════════════════════════════
+
+### Banking (H.8)
+# - id: h8_deposits
+#   name: H.8 Deposits 1w Δ
+#   category: banking
+#   series: [H8_DEPOSITS]
+#   description: |
+#     Deposit flows indicate banking system health and funding stability. Sustained outflows
+#     force banks to shrink balance sheets, a major tightening of financial conditions.
+#   directionality: lower_is_draining
+#   scoring: z
+#   trigger_default: "<= -50e9/w => tight"
+
+# - id: h8_secs
+#   name: H.8 Securities 1w Δ
+#   category: banking
+#   series: [H8_SECURITIES]
+#   description: |
+#     Banks selling securities (especially under duress) tightens financial conditions.
+#     Can indicate funding shortfalls or duration risk management.
+#   directionality: lower_is_draining
+#   duplicates_of: h8_deposits
+
+### Floor Backstops
 # - id: srf_usage
-#   name: Standing Repo Facility usage (daily)
-#   category: floor
-#   series: [SRF_USAGE]
-#   cadence: daily
+#   name: Standing Repo Facility usage
+#   description: Persistent SRF usage is a classic tightness signal.
 #   directionality: higher_is_draining
-#   scoring: threshold
-#   persistence: 2
-#   trigger_default: "> 0 persistent => tight"
 #   duplicates_of: sofr_iorb
-#   notes: Deferred; usage near zero most days.
 
 # - id: fima_repo
-#   name: FIMA repo usage (daily)
-#   category: floor
-#   series: [FIMA_REPO]
-#   cadence: daily
+#   name: FIMA repo usage
+#   description: Elevated usage by foreign institutions indicates global dollar stress.
 #   directionality: higher_is_draining
-#   scoring: threshold
-#   persistence: 2
-#   trigger_default: "> 0 persistent => tight"
 #   duplicates_of: sofr_iorb
-#   notes: Deferred pending stable public source.
 
 # - id: discount_window
 #   name: Discount window primary credit
-#   category: floor
-#   series: [DISCOUNT_WINDOW]
-#   cadence: weekly
+#   description: Non-zero balances outside idiosyncratic events indicate bank funding stress.
 #   directionality: higher_is_draining
-#   scoring: threshold
-#   persistence: 1
-#   trigger_default: "> 0 => stress"
 #   duplicates_of: sofr_iorb
-#   notes: Optional backstop; deferred post‑MVP.
 
-### Deferred (post‑MVP) — Stress
+### Stress
 # - id: move_idx
 #   name: MOVE index
-#   category: stress
-#   series: [MOVE]
-#   cadence: daily
+#   description: |
+#     Bond market "fear gauge." High rates volatility makes hedging expensive,
+#     causing lenders and market makers to pull back. A key measure of uncertainty.
 #   directionality: higher_is_draining
-#   scoring: threshold
-#   persistence: 1
 #   trigger_default: "> 120 => headwind"
 #   duplicates_of: ofr_liq_idx
-#   notes: Licensing; defer.
 
-### Deferred (post‑MVP) — Global
+### Global
 # - id: ecb_bs
-#   name: ECB balance sheet 1w Δ (local)
-#   category: global
-#   series: [ECB_ASSETS]
-#   cadence: weekly
+#   name: ECB balance sheet 1w Δ
+#   description: ECB policy affects global liquidity flows via currency/rate differentials.
 #   directionality: higher_is_supportive
-#   scoring: z
-#   z_cutoff: 1.0
-#   persistence: 2
-#   trigger_default: "sustained increase => supportive"
-#   duplicates_of:
-#   notes: Deferred post‑MVP.
 
 # - id: boj_bs
-#   name: BoJ balance sheet 1w Δ (local)
-#   category: global
-#   series: [BOJ_ASSETS]
-#   cadence: weekly
+#   name: BoJ balance sheet 1w Δ
+#   description: BoJ policy influences global capital flows via yen carry trade.
 #   directionality: higher_is_supportive
-#   scoring: z
-#   z_cutoff: 1.0
-#   persistence: 2
-#   trigger_default: "acceleration => supportive"
 #   duplicates_of: ecb_bs
-#   notes: Deferred post‑MVP.
 
-### Deferred (post‑MVP) — Crypto
+### Crypto
 # - id: stables_7d
 #   name: Stablecoin net issuance (7d)
-#   category: crypto
-#   series: [DEFI_LLAMA_STABLES]
-#   cadence: daily
+#   description: Flow of capital into crypto's primary on-chain liquidity source.
 #   directionality: higher_is_supportive
-#   scoring: z
-#   z_cutoff: 1.0
-#   persistence: 2
-#   trigger_default: "+2–5e9/7d => supportive"
-#   duplicates_of:
-#   notes: Deferred post‑MVP.

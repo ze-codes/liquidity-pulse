@@ -1,17 +1,27 @@
-# Series registry — source of truth for series metadata
-# Updated to match actual working logic in live.py
+# Series Registry — Source of truth for raw data series metadata
+# Each series includes: source, cadence, units, scaling, and documentation
+# This file is read by the backend API (live.py) and can be exposed to LLM context
 ---
 series:
   # ═══════════════════════════════════════════════════════════════════════════
-  # FRED Series
+  # FRED Series (Federal Reserve Economic Data)
   # ═══════════════════════════════════════════════════════════════════════════
   WALCL:
     source: FRED
     cadence: weekly
     units: USD
-    raw_scale: 1e6 # FRED returns in millions
-    output_scale: 1 # We convert to actual dollars
-    notes: Fed total assets (H.4.1)
+    raw_scale: 1e6
+    output_scale: 1
+    name: Federal Reserve Total Assets
+    description: |
+      The total value of assets held by the Federal Reserve, including Treasury securities,
+      mortgage-backed securities, and loans to banks. This is the broadest measure of the
+      Fed's balance sheet size and the ultimate source of base money.
+    impact: High — Primary driver of base money. QE expands WALCL (adds liquidity), QT shrinks it (drains).
+    interpretation: |
+      Expanding balance sheet (WALCL ↑) is supportive for risk assets — implies lower rates,
+      abundant liquidity, encourages investment in higher-yield assets. Contracting balance
+      sheet (WALCL ↓) is a headwind, tightening financial conditions.
 
   RESPPLLOPNWW:
     source: FRED
@@ -19,15 +29,47 @@ series:
     units: USD
     raw_scale: 1e6
     output_scale: 1
-    notes: Reserve balances (H.4.1)
+    name: Reserve Balances with Federal Reserve Banks
+    description: |
+      Deposits held by commercial banks at the Federal Reserve (from H.4.1 release).
+      This is the most direct measure of aggregate liquidity available to the banking system.
+      Reserves are the ultimate settlement asset.
+    impact: High — Changes directly impact banks' capacity to lend, absorb Treasury issuance, and make markets.
+    interpretation: |
+      Rising reserves signal easier funding conditions (supportive for risk assets).
+      Falling reserves signal tightening and can become a significant headwind if scarce.
 
   RRPONTSYD:
     source: FRED
     cadence: daily
     units: USD
-    raw_scale: 1e9 # FRED returns in billions
+    raw_scale: 1e9
     output_scale: 1
-    notes: ON RRP outstanding
+    name: ON RRP Facility Outstanding
+    description: |
+      The amount of cash that money market funds (MMFs) and other eligible institutions
+      lend to the Fed overnight, earning a fixed rate. Represents liquidity drained from
+      the private sector into a safe, cash-equivalent investment.
+    impact: High — A high RRP balance means cash is sitting on the sidelines. Declining RRP means cash is being deployed.
+    interpretation: |
+      Falling RRP balance is supportive for risk assets (cash moving into T-bills, then other assets).
+      Rising RRP balance signals risk aversion and drains liquidity from markets.
+
+  TGA:
+    source: TREASURY_TGA
+    cadence: daily
+    units: USD
+    raw_scale: 1e6
+    output_scale: 1
+    name: Treasury General Account
+    description: |
+      The U.S. Treasury's primary checking account held at the Federal Reserve.
+      When Treasury collects taxes or issues bonds, TGA rises (drains reserves).
+      When Treasury spends (Social Security, etc.), TGA falls (injects cash).
+    impact: High — Direct mechanical link to banking system reserves.
+    interpretation: |
+      Rising TGA is a direct liquidity drain and headwind for risk assets.
+      Falling TGA is a liquidity injection and supportive.
 
   SOFR:
     source: FRED
@@ -35,7 +77,15 @@ series:
     units: percent
     raw_scale: 1
     output_scale: 1
-    notes: Secured overnight financing rate
+    name: Secured Overnight Financing Rate
+    description: |
+      A broad measure of the cost for banks to borrow cash overnight when collateralized
+      by Treasury securities. The primary U.S. interest rate benchmark. Its level relative
+      to Fed administered rates (like IORB) indicates money market stress.
+    impact: Medium — Key indicator of repo market conditions.
+    interpretation: |
+      If SOFR trades persistently above IORB, it signals stress in the repo market —
+      shortage of cash or collateral. This tightness is a headwind for risk assets.
 
   IORB:
     source: FRED
@@ -43,7 +93,15 @@ series:
     units: percent
     raw_scale: 1
     output_scale: 1
-    notes: Interest on reserve balances (Fed admin rate)
+    name: Interest on Reserve Balances
+    description: |
+      The interest rate the Fed pays commercial banks for holding reserves.
+      Primary tool of monetary policy used to control the federal funds rate.
+      Acts as a floor for overnight rates.
+    impact: High (as policy tool) — Changes directly reflect Fed policy stance.
+    interpretation: |
+      The absolute level matters, but spreads of other rates against IORB are more
+      telling for liquidity conditions. IORB serves as the benchmark for comparisons.
 
   DTB3:
     source: FRED
@@ -51,7 +109,14 @@ series:
     units: percent
     raw_scale: 1
     output_scale: 1
-    notes: 3-month T-bill rate
+    name: 3-Month Treasury Bill Rate
+    description: |
+      The yield on 3-month Treasury bills in the secondary market.
+      Bill yields relative to RRP rate and IORB drive MMF asset allocation decisions.
+    impact: Medium — Drives money market fund allocation between RRP and bills.
+    interpretation: |
+      When bill yields rise significantly above the RRP rate, MMFs move cash out of RRP
+      into T-bills. This "cash off the sidelines" dynamic is supportive for risk assets.
 
   DTB4WK:
     source: FRED
@@ -59,7 +124,14 @@ series:
     units: percent
     raw_scale: 1
     output_scale: 1
-    notes: 4-week T-bill rate
+    name: 4-Week Treasury Bill Rate
+    description: |
+      The yield on 4-week Treasury bills in the secondary market.
+      Shorter duration than DTB3, more sensitive to near-term funding conditions.
+    impact: Medium — Another measure of short-term funding costs.
+    interpretation: |
+      Similar to DTB3 — higher yields relative to administered rates incentivize
+      MMFs to deploy cash into bills rather than parking at the RRP facility.
 
   WSHOSHO:
     source: FRED
@@ -67,7 +139,15 @@ series:
     units: USD
     raw_scale: 1e6
     output_scale: 1
-    notes: Fed UST holdings (H.4.1)
+    name: Fed Treasury Securities Holdings
+    description: |
+      The Fed's holdings of U.S. Treasury securities from the H.4.1 release.
+      Weekly changes reflect the pace of QT (runoff) or QE (purchases).
+      This is the mechanical implementation of balance sheet policy.
+    impact: High — Runoff at announced caps is a steady, persistent drain on liquidity.
+    interpretation: |
+      Negative weekly changes (runoff) = headwind. Faster runoff = stronger headwind.
+      Slowdown, flat, or positive changes (purchases) are progressively more supportive.
 
   WSHOMCB:
     source: FRED
@@ -75,26 +155,32 @@ series:
     units: USD
     raw_scale: 1e6
     output_scale: 1
-    notes: Fed MBS holdings (H.4.1)
+    name: Fed MBS Holdings
+    description: |
+      The Fed's holdings of agency mortgage-backed securities from the H.4.1 release.
+      Weekly changes reflect QT/QE pace for the MBS portion of the balance sheet.
+    impact: High — Part of the QT/QE mechanical liquidity drain/add.
+    interpretation: |
+      Same as WSHOSHO — negative changes are headwind, positive are supportive.
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Treasury DTS Series (Daily Treasury Statement)
   # ═══════════════════════════════════════════════════════════════════════════
-  TGA:
-    source: TREASURY_TGA
-    cadence: daily
-    units: USD
-    raw_scale: 1e6 # DTS returns in millions
-    output_scale: 1
-    notes: Treasury General Account closing balance
-
   UST_REDEMPTIONS:
     source: TREASURY_REDEMPTIONS
     cadence: daily
     units: USD
     raw_scale: 1e6
     output_scale: 1
-    notes: Public debt redemptions (marketable + savings)
+    name: Treasury Redemptions (Daily)
+    description: |
+      Daily cash outflows from Treasury as securities mature and are redeemed.
+      Includes marketable securities and nonmarketable savings securities.
+      Excludes intragovernmental (GAS, FFB, SLGS) which don't inject private sector cash.
+    impact: High (supportive) — Redemptions return cash to holders and reduce TGA.
+    interpretation: |
+      Elevated or clustered redemptions are supportive of liquidity and can offset
+      issuance drains around the same window.
 
   UST_INTEREST:
     source: TREASURY_INTEREST
@@ -102,7 +188,14 @@ series:
     units: USD
     raw_scale: 1e6
     output_scale: 1
-    notes: Interest on Treasury securities (coupon outlays)
+    name: Treasury Interest Outlays (Daily)
+    description: |
+      Daily coupon and interest payments made by Treasury to security holders.
+      Direct cash injections from Treasury to the private sector.
+    impact: Medium-High (supportive) — Reduces TGA, injects cash.
+    interpretation: |
+      Higher interest outlays are supportive for liquidity on payment days
+      and can cushion issuance-related drains.
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Treasury Auction Series
@@ -111,12 +204,20 @@ series:
     source: TREASURY_AUCTIONS
     cadence: daily
     units: USD
-    raw_scale: 1 # Auctions API returns actual dollars
+    raw_scale: 1
     output_scale: 1
-    notes: Auction settlements by issue_date
+    name: Treasury Auction Settlements
+    description: |
+      Using issue_date from auctions API as proxy for settlement timing.
+      Sums total_accepted (or offering_amt fallback) by issue_date.
+      Tracks realized cash call when auctions complete.
+    impact: High (cash drain timing) — Clusters concentrate settlement cash needs.
+    interpretation: |
+      Spikes flag weeks where Treasury cash calls are lumpy; these can coincide
+      with tighter liquidity and risk-off tone.
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Derived/Computed Series (aggregated from raw series)
+  # Derived/Computed Series
   # ═══════════════════════════════════════════════════════════════════════════
   UST_REDEMPTIONS_W:
     source: DERIVED
@@ -124,7 +225,8 @@ series:
     aggregation: weekly_sum
     cadence: weekly
     units: USD
-    notes: Weekly aggregate of UST_REDEMPTIONS
+    name: Treasury Redemptions (Weekly)
+    description: Weekly aggregate of daily redemptions for smoother signal.
 
   UST_INTEREST_W:
     source: DERIVED
@@ -132,7 +234,8 @@ series:
     aggregation: weekly_sum
     cadence: weekly
     units: USD
-    notes: Weekly aggregate of UST_INTEREST
+    name: Treasury Interest (Weekly)
+    description: Weekly aggregate of daily interest payments for smoother signal.
 
   UST_BILL_SHARE:
     source: DERIVED
@@ -140,7 +243,10 @@ series:
     aggregation: weekly_bill_pct
     cadence: weekly
     units: percent
-    notes: Weekly bill share of total issuance
+    name: Bill Share of Issuance (Weekly)
+    description: |
+      Percentage of weekly issuance that is T-bills vs coupons.
+      Higher bill share = less duration drain on markets.
 
   # ═══════════════════════════════════════════════════════════════════════════
   # OFR Series
@@ -151,4 +257,12 @@ series:
     units: index
     raw_scale: 1
     output_scale: 1
-    notes: OFR UST Liquidity Stress Index
+    name: OFR Treasury Liquidity Stress Index
+    description: |
+      An index from the Office of Financial Research measuring stress in the
+      U.S. Treasury market — the most important market globally. Aggregates
+      measures of market functioning (bid-ask spreads, order depth, etc.).
+    impact: High (as signal) — Poor Treasury market functioning has spillover effects everywhere.
+    interpretation: |
+      Rising stress in the Treasury market signals systemic illiquidity
+      and is a major headwind for all risk assets.

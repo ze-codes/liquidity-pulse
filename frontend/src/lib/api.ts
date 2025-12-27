@@ -71,4 +71,3 @@ export async function fetchSeriesData(
   if (!res.ok) throw new Error(`Failed to fetch series: ${id}`);
   return res.json();
 }
-

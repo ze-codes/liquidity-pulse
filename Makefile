@@ -2,18 +2,23 @@
 # API (Python)
 # =============================================================================
 
+VENV := .venv/bin
+PYTHON := $(VENV)/python
+PIP := $(VENV)/pip
+
 run:
-	uvicorn api.main:app --reload --port 8000
+	$(VENV)/uvicorn api.main:app --reload --port 8000
 
 install:
-	pip install -r requirements.txt
+	python3 -m venv .venv
+	$(PIP) install -r requirements.txt
 
 test:
-	pytest -q
+	$(VENV)/pytest -q
 
 fmt:
-	black api/ app/ tests/
-	isort api/ app/ tests/
+	$(VENV)/black api/ app/ tests/
+	$(VENV)/isort api/ app/ tests/
 
 clean-cache:
 	rm -rf cache/series/*.csv
