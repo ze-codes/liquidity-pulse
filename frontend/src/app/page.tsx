@@ -16,8 +16,15 @@ import type { Selection, SelectionMode, Indicator, Series } from "@/types";
 
 export default function Home() {
   // Load registry data (indicators and series)
-  const { indicators, seriesList, groupedSeries, getUnits, error, setError } =
-    useRegistry();
+  const {
+    indicators,
+    seriesList,
+    groupedSeries,
+    getUnits,
+    error,
+    setError,
+    isLoading: registryLoading,
+  } = useRegistry();
 
   // Chart state and controls
   const {
@@ -120,20 +127,21 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
             {/* Indicators Panel */}
-            <div className="lg:col-span-4">
+            <div>
               <IndicatorList
                 indicators={indicators}
                 chartIndicators={chartIndicators}
                 focusedId={selection.mode === "indicator" ? selection.id : null}
                 onFocus={handleFocusIndicator}
                 onToggleChart={handleToggleChartIndicator}
+                isLoading={registryLoading}
               />
             </div>
 
             {/* Data Series Panel */}
-            <div className="lg:col-span-4">
+            <div>
               <SeriesList
                 groupedSeries={groupedSeries}
                 chartSeries={chartSeries}
@@ -141,11 +149,12 @@ export default function Home() {
                 focusedId={selection.mode === "series" ? selection.id : null}
                 onFocus={handleFocusSeries}
                 onToggleChart={handleToggleChartSeries}
+                isLoading={registryLoading}
               />
             </div>
 
             {/* Details Panel */}
-            <div className="lg:col-span-4">
+            <div>
               <DetailsPanel
                 selection={selection}
                 selectedItem={selectedItem}
